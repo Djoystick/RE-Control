@@ -8,6 +8,7 @@ import { TwitchBridge } from './chat-bridge/TwitchBridge'
 import { DonationBridge } from './chat-bridge/DonationBridge'
 import { REBridge } from './game-bridge/REBridge'
 import { VotingManager } from './game-bridge/VotingManager'
+import { narrator } from './ai-narrator/Narrator'
 import { sysLogger } from './utils/logger'
 import { dbManager } from './db/DatabaseManager'
 import { SUPPORTED_GAMES } from './setup/GameDatabase'
@@ -145,18 +146,55 @@ function createWindow(): void {
   let activeTwitchChannel = '';
 
   // 2. Voting Manager Events route to UI and Game Bridge
+  votingManager.on('vote:interrupted', () => {
+    mainWindow.webContents.send('simulator:syslog', { message: 'VOTE INTERRUPTED BY VIP DONATION!' })
+  })
+
   votingManager.on('vote:start', (state) => {
-    if (!twitchBridge['client']) simulator.startSimulating(500)
+    if (!activeTwitchChannel) simulator.startSimulating(500)
     mainWindow.webContents.send('vote:update', state)
     mainWindow.webContents.send('simulator:syslog', { message: 'VOTING STARTED!' })
     overlayServer.broadcast('vote:start', state)
     overlayServer.broadcast('vote:update', state)
 
     if (activeTwitchChannel) {
-      const numToEmoji = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
-      const optionsText = state.options.map((opt: any) => `${numToEmoji[opt.id] || opt.id} ${opt.displayName}`).join('  🔸  ');
-      twitchBridge.sendMessage(activeTwitchChannel, `📢 ГОЛОСОВАНИЕ! Пишите цифру:  🔸  ${optionsText}`);
+      const optionsText = state.options.map((opt: any) => `[${opt.id}] ${opt.displayName}`).join('  |  ');
+      twitchBridge.sendMessage(activeTwitchChannel, `📢 ГОЛОСОВАНИЕ! Пишите цифру: ${optionsText}`);
     }
+  })
+
+  votingManager.on('vote:intervention', (state) => {
+    mainWindow.webContents.send('simulator:syslog', { message: state.message })
+    overlayServer.broadcast('vote:intervention', state)
+    if (activeTwitchChannel) {
+      twitchBridge.sendMessage(activeTwitchChannel, `🚨 ВМЕШАТЕЛЬСТВО АМБРЕЛЛЫ: ${state.message}`);
+    }
+  })
+
+  // Narrator: intervention events
+  votingManager.on('vote:intervention', (state) => {
+    narrator.say(state.type)
+  })
+
+  // Narrator: traitor starts
+  votingManager.on('traitor:start', (state) => {
+    narrator.say('traitor', state.username)
+  })
+
+  // Narrator: negative effect wins
+  votingManager.on('vote:end', ({ winner }) => {
+    if (winner && winner.category === 'negative') {
+      narrator.say('negative_win')
+    }
+  })
+
+  narrator.on('narrator:speak', (data) => {
+    overlayServer.broadcast('narrator:speak', data)
+    mainWindow.webContents.send('narrator:speak', data)
+  })
+
+  ipcMain.on('narrator:toggle', (_, val: boolean) => {
+    narrator.setEnabled(val)
   })
 
   votingManager.on('vote:tick', (state) => {
@@ -227,7 +265,11 @@ function createWindow(): void {
   ipcMain.on('simulator:start', () => {
     votingManager.startCycle()
   })
-  
+  ipcMain.on('simulator:combo', () => {
+    // We repurpose the combo button to force an intervention instantly
+    (votingManager as any).rollIntervention(true);
+  })
+
   ipcMain.on('simulator:stop', () => {
     votingManager.stop()
     simulator.stopSimulating()
@@ -316,6 +358,9 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+
+
 
 
 

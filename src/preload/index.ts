@@ -1,9 +1,15 @@
-﻿import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
 const api = {
   startSimulator: () => ipcRenderer.send('simulator:start'),
   stopSimulator: () => ipcRenderer.send('simulator:stop'),
+  simulatorCombo: (optionId: number) => ipcRenderer.send('simulator:combo', optionId),
+  narratorToggle: (val: boolean) => ipcRenderer.send('narrator:toggle', val),
+  onNarratorSpeak: (callback: (data: { text: string; eventType: string }) => void) => {
+    ipcRenderer.removeAllListeners('narrator:speak')
+    ipcRenderer.on('narrator:speak', (_, data) => callback(data))
+  },
   updateSettings: (settings: any) => ipcRenderer.send('settings:update', settings),
   connectTwitch: (channel: string) => ipcRenderer.send('twitch:connect', channel),
   disconnectTwitch: () => ipcRenderer.send('twitch:disconnect'),
@@ -74,6 +80,7 @@ if (process.contextIsolated) {
   // @ts-ignore
   window.api = api
 }
+
 
 
 

@@ -162,9 +162,9 @@ export const SimulatorPanel: React.FC = () => {
       <motion.div 
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-pixel-void border border-pixel-amber p-3 rounded relative overflow-hidden shadow-[0_0_10px_rgba(245,158,11,0.3)]"
+        className="bg-pixel-void border border-pixel-amber p-3 rounded relative overflow-hidden shadow-[0_0_10px_rgba(245,158,11,0.3)] flex flex-col min-h-0"
       >
-        <div className="flex justify-between items-center mb-2 border-b border-pixel-amber/30 pb-1">
+        <div className="flex justify-between items-center mb-2 border-b border-pixel-amber/30 pb-1 flex-shrink-0">
           <div className="text-pixel-amber font-bold flex items-center gap-2 text-xs">
             <Radio className="animate-pulse" size={14} /> VOTE IN PROGRESS
           </div>
@@ -172,23 +172,43 @@ export const SimulatorPanel: React.FC = () => {
             {Math.ceil((voteState?.timeRemainingMs || 0) / 1000)}s
           </div>
         </div>
+
+        {voteState?.intervention && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, filter: ['brightness(1)', 'brightness(1.5)', 'brightness(1)'] }}
+            transition={{ duration: 0.5, repeat: Infinity, repeatType: 'reverse' }}
+            className="bg-pixel-danger/20 border border-pixel-danger text-pixel-danger font-bold text-[10px] uppercase p-1.5 mb-2 text-center rounded shadow-[0_0_10px_rgba(220,38,38,0.3)] flex-shrink-0"
+          >
+            ⚠️ {voteState.intervention.message}
+          </motion.div>
+        )}
         
-        <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+        <div className="flex flex-col gap-1.5 overflow-y-auto custom-scrollbar flex-1 min-h-0">
           {(voteState?.options || []).map((opt: any) => {
             const percentage = ((voteState?.totalVotes || 0) > 0) 
               ? Math.round(((opt?.votes || 0) / voteState.totalVotes) * 100) 
               : 0;
+            
+            const isBlind = voteState?.intervention?.type === 'blind';
+            const displayVotes = isBlind ? '???' : opt?.votes || 0;
+            const displayPercentage = isBlind ? '???%' : `${percentage}%`;
+            const barWidth = isBlind ? '50%' : `${percentage}%`;
+            const barColor = isBlind ? 'bg-pixel-danger/70' : 'bg-pixel-cyan';
+
             return (
               <div key={opt?.id || Math.random()} className="relative z-10">
                 <div className="flex justify-between text-[10px] font-mono text-pixel-light mb-0.5">
                   <span>[{opt?.id}] {opt?.displayName}</span>
-                  <span className="text-pixel-cyan">{opt?.votes || 0} ({percentage}%)</span>
+                  <span className={isBlind ? "text-pixel-danger font-bold" : "text-pixel-cyan"}>
+                    {displayVotes} ({displayPercentage})
+                  </span>
                 </div>
                 <div className="h-1.5 w-full bg-pixel-panel border border-pixel-muted rounded overflow-hidden">
                   <motion.div 
-                    className="h-full bg-pixel-cyan" 
+                    className={`h-full ${barColor}`} 
                     initial={{ width: 0 }}
-                    animate={{ width: `${percentage}%` }}
+                    animate={{ width: barWidth }}
                     transition={{ duration: 0.5 }}
                   />
                 </div>
@@ -243,8 +263,8 @@ export const SimulatorPanel: React.FC = () => {
                 {/* Start / Stop Buttons */}
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ filter: 'brightness(1.2)' }}
+                    whileTap={{ scale: 0.98 }}
                     className="flex flex-col items-center justify-center gap-1 bg-pixel-panel/50 hover:bg-pixel-amber/20 text-pixel-amber border border-pixel-amber/30 p-2 rounded transition-colors"
                     onClick={() => window.api?.startSimulator?.()}
                   >
@@ -252,8 +272,8 @@ export const SimulatorPanel: React.FC = () => {
                     <span className="text-[10px] uppercase font-bold tracking-wider">Start Event</span>
                   </motion.button>
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ filter: 'brightness(1.2)' }}
+                    whileTap={{ scale: 0.98 }}
                     className="flex flex-col items-center justify-center gap-1 bg-pixel-panel/50 hover:bg-pixel-danger/20 text-pixel-danger border border-pixel-danger/30 p-2 rounded transition-colors"
                     onClick={() => window.api?.stopSimulator?.()}
                   >
@@ -283,22 +303,39 @@ export const SimulatorPanel: React.FC = () => {
                 {/* Donate Simulation */}
                 <div className="border-t border-pixel-muted/30 pt-3 flex gap-2">
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ filter: 'brightness(1.2)' }}
+                    whileTap={{ scale: 0.98 }}
                     className="flex-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/50 text-green-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(34,197,94,0.3)] transition-colors"
-                    onClick={() => (window as any).api?.simulateDonation?.(100)}
+                                        onClick={() => (window as any).api?.simulateDonation?.(100)}
                   >
                      💎 100₽
                   </motion.button>
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ filter: 'brightness(1.2)' }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 text-red-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(239,68,68,0.3)] transition-colors"
+                    onClick={() => (window as any).api?.simulateDonation?.(300)}
+                  >
+                     🚨 300₽
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ filter: 'brightness(1.2)' }}
+                    whileTap={{ scale: 0.98 }}
                     className="flex-1 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(234,179,8,0.3)] transition-colors"
                     onClick={() => (window as any).api?.simulateDonation?.(500)}
                   >
                      👑 500₽
                   </motion.button>
                 </div>
+
+                <motion.button
+                  whileHover={{ filter: 'brightness(1.2)' }}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/50 text-orange-400 text-xs uppercase font-bold py-2 rounded flex items-center justify-center gap-2 shadow-[0_0_5px_rgba(249,115,22,0.3)] transition-colors mt-2"
+                  onClick={() => (window as any).api?.simulatorCombo?.()}
+                >
+                   🚨 ВМЕШАТЕЛЬСТВО АМБРЕЛЛЫ
+                </motion.button>
 
                 {/* Traitor Button */}
                 <div className="border-t border-pixel-muted/30 pt-3">
@@ -415,7 +452,7 @@ export const SimulatorPanel: React.FC = () => {
                       {!twitchStatus?.connected ? (
                         <motion.button
                           whileHover={{ scale: 1.02, boxShadow: '0 0 15px rgba(145,70,255,0.8)' }}
-                          whileTap={{ scale: 0.95 }}
+                          whileTap={{ scale: 0.98 }}
                           className="w-full flex items-center justify-center gap-2 bg-[#6441a5] text-pixel-light font-bold py-1.5 px-3 border border-pixel-light/50 rounded text-xs shadow-[0_0_5px_rgba(145,70,255,0.5)]"
                           onClick={() => {
                             if (window.api?.saveTwitchAuth) {
@@ -429,7 +466,7 @@ export const SimulatorPanel: React.FC = () => {
                       ) : (
                         <motion.button
                           whileHover={{ scale: 1.02, boxShadow: '0 0 10px rgba(156,163,175,0.6)' }}
-                          whileTap={{ scale: 0.95 }}
+                          whileTap={{ scale: 0.98 }}
                           className="w-full flex items-center justify-center gap-2 bg-pixel-muted/50 text-pixel-light font-bold py-1.5 px-3 border border-pixel-light/50 rounded text-xs"
                           onClick={() => window.api?.disconnectTwitch?.()}
                         >
@@ -448,7 +485,7 @@ export const SimulatorPanel: React.FC = () => {
       {/* Right Column (Data/State) */}
       <div className="col-span-7 h-full flex flex-col gap-3 overflow-hidden relative z-10">
         {/* Voting UI at the top */}
-        <div className="flex-shrink-0">
+        <div className="flex flex-col min-h-0 max-h-[50%]">
           {renderVotingUI()}
         </div>
 
@@ -500,6 +537,7 @@ export const SimulatorPanel: React.FC = () => {
     </div>
   )
 }
+
 
 
 

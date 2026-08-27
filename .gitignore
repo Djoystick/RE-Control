@@ -11,3 +11,8 @@ dist-electron/
 local_docs/
 .env
 *.env.local
+
+scripts/edge_tts_pkg/
+*.mp3
+patch_*.py
+fix_*.py
