@@ -25,9 +25,12 @@
 
 ## 📸 Скриншоты интерфейса
 
-| Панель управления (Control) | Конфигуратор эффектов (Tiers) |
+| Панель управления (Control) | Настройка Twitch |
 | :---: | :---: |
 | <img src="Screenshots/screenshot_1.png" width="400"/> | <img src="Screenshots/screenshot_2.png" width="400"/> |
+
+| Конфигуратор Эффектов (Tiers) | Мастер установки (Setup Wizard) |
+| :---: | :---: |
 | <img src="Screenshots/screenshot_3.png" width="400"/> | <img src="Screenshots/screenshot_4.png" width="400"/> |
 
 ## 🛠️ Технический стек
@@ -63,3 +66,4 @@
 
 ## 📝 Лицензия
 Создано Djoystick & Antigravity.
+
