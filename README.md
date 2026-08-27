@@ -65,5 +65,5 @@
 - [ ] **Фаза 4:** Поддержка RE4 / RE3 Remake, Публичное API для плагинов
 
 ## 📝 Лицензия
-Создано Djoystick & Antigravity.
+Создано Djoystick.
 
