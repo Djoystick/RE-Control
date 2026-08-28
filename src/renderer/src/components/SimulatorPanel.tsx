@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { TiersConfigurator } from './TiersConfigurator'
 import { VoiceTester } from './VoiceTester'
 
-export const SimulatorPanel: React.FC = () => {
+export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReinstall }) => {
   const [logs, setLogs] = useState<any[]>([ { type: 'system', message: 'RE:CONTROL BRIDGE INITIALIZED' } ])
   const [voteState, setVoteState] = useState<any>(null)
   const [twitchChannel, setTwitchChannel] = useState<string>('')
@@ -576,6 +576,19 @@ export const SimulatorPanel: React.FC = () => {
                       Save Settings
                     </motion.button>
                   </div>
+                </div>
+
+                {/* System Settings */}
+                <div className="border-t border-pixel-muted/30 pt-3 mt-1">
+                  <h3 className="text-xs font-bold text-pixel-light/90 uppercase mb-2 text-pixel-danger">Danger Zone</h3>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full bg-pixel-danger/10 hover:bg-pixel-danger border border-pixel-danger/50 hover:border-pixel-danger text-pixel-danger hover:text-pixel-void text-xs uppercase font-bold py-1.5 rounded transition-colors"
+                    onClick={() => onReinstall && onReinstall()}
+                  >
+                    ⚙️ Reinstall Game Bridge
+                  </motion.button>
                 </div>
               </motion.div>
             )}

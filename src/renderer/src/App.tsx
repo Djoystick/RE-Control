@@ -84,13 +84,8 @@ function App() {
                  {!isLoading && (
                    setupDone ? (
                      <>
-                       <SimulatorPanel />
-                       <button 
-                         className="absolute top-4 right-4 z-50 flex items-center justify-center gap-1 bg-pixel-panel border border-pixel-muted text-pixel-light px-2 py-1 text-[10px] hover:bg-pixel-cyan hover:text-pixel-void transition-colors rounded shadow-pixel"
-                         onClick={() => setSetupDone(false)}
-                       >
-                         <Settings size={12} /> Reinstall
-                       </button>
+                       <SimulatorPanel onReinstall={() => setSetupDone(false)} />
+                       
                      </>
                    ) : (
                      <SetupWizard onComplete={() => setSetupDone(true)} />
