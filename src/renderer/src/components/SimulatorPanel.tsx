@@ -5,7 +5,7 @@ import { TiersConfigurator } from './TiersConfigurator'
 import { VoiceTester } from './VoiceTester'
 
 export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReinstall }) => {
-  const [logs, setLogs] = useState<any[]>([ { type: 'system', message: 'RE:CONTROL BRIDGE INITIALIZED' } ])
+  const [logs, setLogs] = useState<any[]>([ { type: 'system', message: 'RE:CONTROL BRIDGE INITIALIZED', timestamp: new Date().toLocaleTimeString() } ])
   const [voteState, setVoteState] = useState<any>(null)
   const [twitchChannel, setTwitchChannel] = useState<string>('')
   const [twitchStatus, setTwitchStatus] = useState<{connected: boolean, channel: string, botAuthenticated?: boolean}>({connected: false, channel: ''})
@@ -48,46 +48,66 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
     });
 
     if (window.api) {
-      window.api.onSimulatorLog?.((cmd) => {
-        setLogs((prev) => [...prev, cmd])
-      })
+      const handleSimulatorLog = (cmd: any) => {
+        setLogs((prev) => [...prev, { ...cmd, timestamp: new Date().toLocaleTimeString() }])
+      }
       
-      window.api.onSimulatorSyslog?.((sys) => {
+      const handleSimulatorSyslog = (sys: any) => {
         if (sys?.message?.startsWith('WINNER:')) setLastWinner(sys?.message?.replace('WINNER: ', ''));
-        setLogs((prev) => [...prev, { type: 'system', message: sys?.message }])
-      })
+        setLogs((prev) => [...prev, { type: 'system', message: sys?.message, timestamp: new Date().toLocaleTimeString() }])
+      }
 
-      window.api.onVoteUpdate?.((state) => {
+      const handleVoteUpdate = (state: any) => {
         setVoteState(state)
-      })
+      }
 
-      window.api.onTwitchStatus?.((status) => {
+      const handleTwitchStatus = (status: any) => {
         if (status) setTwitchStatus(status)
-      })
+      }
       
-      window.api.onTraitorStart?.((state) => {
+      const handleTraitorStart = (state: any) => {
         setTraitorState(state)
-      })
+      }
       
-      window.api.onTraitorEnd?.(() => {
+      const handleTraitorEnd = () => {
         setTraitorState(null)
-      })
+      }
       
-      window.api.onTrustedCount?.((count) => {
+      const handleTrustedCount = (count: any) => {
         setTrustedCount(count)
-      })
+      }
+
+      window.api.onSimulatorLog?.(handleSimulatorLog)
+      window.api.onSimulatorSyslog?.(handleSimulatorSyslog)
+      window.api.onVoteUpdate?.(handleVoteUpdate)
+      window.api.onTwitchStatus?.(handleTwitchStatus)
+      window.api.onTraitorStart?.(handleTraitorStart)
+      window.api.onTraitorEnd?.(handleTraitorEnd)
+      window.api.onTrustedCount?.(handleTrustedCount)
 
       window.api.updateSettings?.({ cooldownMs: 600000 })
       
       // Load initial twitch auth if available
       if (window.api.getTwitchAuth) {
-        window.api.getTwitchAuth().then(auth => {
+        window.api.getTwitchAuth().then((auth: any) => {
           if (auth) {
             setBotUsername(auth.username || '')
             setBotToken(auth.token || '')
             if (auth.channel) setTwitchChannel(auth.channel)
           }
         })
+      }
+
+      return () => {
+        if (window.api.removeListener) {
+          window.api.removeListener('simulator-log', handleSimulatorLog)
+          window.api.removeListener('simulator-syslog', handleSimulatorSyslog)
+          window.api.removeListener('vote-update', handleVoteUpdate)
+          window.api.removeListener('twitch-status', handleTwitchStatus)
+          window.api.removeListener('traitor-start', handleTraitorStart)
+          window.api.removeListener('traitor-end', handleTraitorEnd)
+          window.api.removeListener('trusted-count', handleTrustedCount)
+        }
       }
     }
   }, [])
@@ -626,7 +646,7 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
             <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 pr-1 text-[10px] relative z-10">
               {(logs || []).map((log, index) => (
                 <div key={index} className="mb-1.5 break-all border-b border-pixel-border/20 pb-1 flex flex-col gap-0.5">
-                  <div className="text-[9px] text-pixel-light/30">{new Date().toLocaleTimeString()}</div>
+                  <div className="text-[9px] text-pixel-light/30">{log.timestamp}</div>
                   <div className="flex items-start">
                     {log?.type === 'system' ? (
                       <span className="text-pixel-danger font-bold opacity-100">{log?.message}</span>

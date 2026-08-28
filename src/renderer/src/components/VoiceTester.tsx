@@ -1,22 +1,36 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { X, Play, Volume2 } from 'lucide-react'
 
 export function VoiceTester({ onClose }: { onClose: () => void }) {
   const [files, setFiles] = useState<Record<string, string[]>>({})
   const [playing, setPlaying] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     // Load files map from backend
     ;(window as any).electron.ipcRenderer.invoke('audio:get-files').then(setFiles)
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+        audioRef.current = null
+      }
+    }
   }, [])
 
   const playFile = async (folder: string, file: string) => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = ''
+    }
     setPlaying(file)
     const base64 = await (window as any).electron.ipcRenderer.invoke('audio:read-file', folder, file)
     if (base64) {
       const mime = file.endsWith('.ogg') ? 'audio/ogg' : 'audio/mpeg'
       const audio = new Audio(`data:${mime};base64,${base64}`)
+      audioRef.current = audio
       audio.onended = () => setPlaying(null)
       audio.play().catch(e => {
         console.error("Audio play error", e)

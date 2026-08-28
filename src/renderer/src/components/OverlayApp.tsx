@@ -27,14 +27,25 @@ interface EffectState {
 
 
 
+const activeAudios = new Set<HTMLAudioElement>();
+
 async function playFilteredAudio(base64: string, _type: string) {
     // Так как фильтры Web Audio API были удалены по просьбе пользователя,
     // мы используем стандартный, максимально надежный HTML5 Audio плеер.
     return new Promise<void>((resolve, reject) => {
         const audio = new Audio(`data:audio/ogg;base64,${base64}`);
-        audio.onended = () => resolve();
-        audio.onerror = () => reject(new Error("Audio decoding error"));
+        activeAudios.add(audio);
+        
+        audio.onended = () => {
+            activeAudios.delete(audio);
+            resolve();
+        };
+        audio.onerror = () => {
+            activeAudios.delete(audio);
+            reject(new Error("Audio decoding error"));
+        };
         audio.play().catch(err => {
+            activeAudios.delete(audio);
             if (err.name === 'NotAllowedError') {
                 reject(new Error("БРАУЗЕР БЛОКИРУЕТ ЗВУК! КЛИКНИ МЫШКОЙ ПО ОКНУ ОВЕРЛЕЯ!"));
             } else {
@@ -107,6 +118,12 @@ export default function OverlayApp() {
     return () => {
       clearTimeout(reconnectTimer)
       if (ws) ws.close()
+      
+      activeAudios.forEach(audio => {
+        audio.pause();
+        audio.src = '';
+      });
+      activeAudios.clear();
     }
   }, [])
 
