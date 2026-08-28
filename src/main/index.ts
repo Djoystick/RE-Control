@@ -40,8 +40,6 @@ function createWindow(): void {
   })
 
 
-  registerGlobalHotkeys();
-
   // --- HOTKEYS IPC ---
   const HOTKEYS_FILE = join(app.getPath('userData'), 'hotkeys_config.json');
   
@@ -82,6 +80,8 @@ function createWindow(): void {
     registerGlobalHotkeys(); // re-register on the fly
     return true;
   });
+
+  registerGlobalHotkeys();
 
   // Expose DB IPC
   ipcMain.handle('db:getLeaderboard', () => {
