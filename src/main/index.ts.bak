@@ -1,4 +1,4 @@
-import 'dotenv/config';
+﻿import 'dotenv/config';
 import { app, shell, BrowserWindow, ipcMain, globalShortcut } from 'electron'
 import { join } from 'path'
 import { execFile } from 'child_process'
@@ -333,29 +333,25 @@ function createWindow(): void {
 
   
   // ─── AUDIO TESTER IPC ───
-  ipcMain.handle('audio:get-files', async () => {
-    const fsPromises = require('node:fs/promises');
+  ipcMain.handle('audio:get-files', () => {
     const base = join(process.cwd(), 'assets', 'audio')
     const result: Record<string, string[]> = {}
     if (fs.existsSync(base)) {
-      const folders = await fsPromises.readdir(base)
+      const folders = fs.readdirSync(base)
       for (const f of folders) {
         const folderPath = join(base, f)
-        const stat = await fsPromises.stat(folderPath)
-        if (stat.isDirectory()) {
-          const files = await fsPromises.readdir(folderPath)
-          result[f] = files.filter((file: string) => file.endsWith('.mp3') || file.endsWith('.wav') || file.endsWith('.ogg'))
+        if (fs.statSync(folderPath).isDirectory()) {
+          result[f] = fs.readdirSync(folderPath).filter(file => file.endsWith('.mp3') || file.endsWith('.wav') || file.endsWith('.ogg'))
         }
       }
     }
     return result
   })
 
-  ipcMain.handle('audio:read-file', async (_, folder: string, file: string) => {
-    const fsPromises = require('node:fs/promises');
+  ipcMain.handle('audio:read-file', (_, folder: string, file: string) => {
     const filePath = join(process.cwd(), 'assets', 'audio', folder, file)
     if (fs.existsSync(filePath)) {
-      const buffer = await fsPromises.readFile(filePath)
+      const buffer = fs.readFileSync(filePath)
       return buffer.toString('base64')
     }
     return null

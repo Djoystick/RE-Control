@@ -8,36 +8,14 @@ export class OverlayServer {
 
     constructor() {
         try {
-            this.wss = new WebSocketServer({ port: this.port, host: '127.0.0.1' });
-            
-            const interval = setInterval(() => {
-                for (const client of this.clients) {
-                    const extClient = client as any;
-                    if (extClient.isAlive === false) {
-                        this.clients.delete(client);
-                        return client.terminate();
-                    }
-                    extClient.isAlive = false;
-                    client.ping();
-                }
-            }, 30000);
-
-            this.wss.on('close', () => {
-                clearInterval(interval);
-            });
-
+            this.wss = new WebSocketServer({ port: this.port });
             this.wss.on('connection', (ws: WebSocket) => {
-                const extWs = ws as any;
-                extWs.isAlive = true;
-                ws.on('pong', () => {
-                    extWs.isAlive = true;
-                });
                 this.clients.add(ws);
                 ws.on('close', () => {
                     this.clients.delete(ws);
                 });
             });
-            sysLogger.info(`OverlayServer started on ws://127.0.0.1:${this.port}`);
+            sysLogger.info(`OverlayServer started on ws://localhost:${this.port}`);
         } catch (error) {
             sysLogger.error('Failed to start OverlayServer', error);
         }
