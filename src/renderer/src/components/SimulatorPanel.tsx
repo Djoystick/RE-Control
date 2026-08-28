@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Play, Square, Clock, Skull, Loader2, Radio, CheckCircle2, XCircle, Radar } from 'lucide-react'
+import { Play, Square, Clock, Skull, Loader2, Radio, CheckCircle2, XCircle, Radar, Volume2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { TiersConfigurator } from './TiersConfigurator'
+import { VoiceTester } from './VoiceTester'
+
 export const SimulatorPanel: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([ { type: 'system', message: 'RE:CONTROL BRIDGE INITIALIZED' } ])
   const [voteState, setVoteState] = useState<any>(null)
@@ -12,12 +14,13 @@ export const SimulatorPanel: React.FC = () => {
   
   const [traitorState, setTraitorState] = useState<any>(null)
   const [trustedCount, setTrustedCount] = useState<number>(0)
+  const [showTester, setShowTester] = useState<boolean>(false)
   
   // Token validation state
   const [tokenStatus, setTokenStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
 
   // Tab and Bot Settings state
-  const [activeTab, setActiveTab] = useState<'control' | 'twitch' | 'tiers'>('control')
+  const [activeTab, setActiveTab] = useState<'control' | 'twitch' | 'tiers' | 'debug'>('control')
   
   const [botUsername, setBotUsername] = useState<string>('')
   const [botToken, setBotToken] = useState<string>('')
@@ -228,7 +231,7 @@ export const SimulatorPanel: React.FC = () => {
       <div className="col-span-5 flex flex-col gap-3 relative z-10 overflow-hidden bg-pixel-void/40 p-3 rounded border border-pixel-border/50 h-full">
         
         {/* TABS */}
-        <div className="flex gap-2 flex-shrink-0 mb-1">
+        <div className="flex gap-2 flex-shrink-0 mb-3">
           <button 
             className={`flex-1 py-1.5 text-[10px] uppercase font-bold border rounded transition-colors ${activeTab === 'control' ? 'bg-pixel-amber/20 text-pixel-amber border-pixel-amber shadow-[0_0_10px_rgba(245,158,11,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/50 hover:bg-pixel-muted/20'}`}
             onClick={() => setActiveTab('control')}
@@ -246,6 +249,12 @@ export const SimulatorPanel: React.FC = () => {
             onClick={() => setActiveTab('tiers')}
           >
             Tiers
+          </button>
+          <button 
+            className={`flex-1 py-1.5 text-[10px] uppercase font-bold border rounded transition-colors ${activeTab === 'debug' ? 'bg-pixel-danger/20 text-pixel-danger border-pixel-danger shadow-[0_0_10px_rgba(220,38,38,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/50 hover:bg-pixel-muted/20'}`}
+            onClick={() => setActiveTab('debug')}
+          >
+            Debug
           </button>
         </div>
 
@@ -300,65 +309,6 @@ export const SimulatorPanel: React.FC = () => {
                   </select>
                 </div>
 
-                {/* Donate Simulation */}
-                <div className="border-t border-pixel-muted/30 pt-3 flex gap-2">
-                  <motion.button
-                    whileHover={{ filter: 'brightness(1.2)' }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/50 text-green-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(34,197,94,0.3)] transition-colors"
-                                        onClick={() => (window as any).api?.simulateDonation?.(100)}
-                  >
-                     💎 100₽
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ filter: 'brightness(1.2)' }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 text-red-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(239,68,68,0.3)] transition-colors"
-                    onClick={() => (window as any).api?.simulateDonation?.(300)}
-                  >
-                     🚨 300₽
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ filter: 'brightness(1.2)' }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex-1 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(234,179,8,0.3)] transition-colors"
-                    onClick={() => (window as any).api?.simulateDonation?.(500)}
-                  >
-                     👑 500₽
-                  </motion.button>
-                </div>
-
-                <motion.button
-                  whileHover={{ filter: 'brightness(1.2)' }}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/50 text-orange-400 text-xs uppercase font-bold py-2 rounded flex items-center justify-center gap-2 shadow-[0_0_5px_rgba(249,115,22,0.3)] transition-colors mt-2"
-                  onClick={() => (window as any).api?.simulatorCombo?.()}
-                >
-                   🚨 ВМЕШАТЕЛЬСТВО АМБРЕЛЛЫ
-                </motion.button>
-
-                {/* Traitor Button */}
-                <div className="border-t border-pixel-muted/30 pt-3">
-                  <motion.button
-                    whileHover={{ scale: (trustedCount > 0 && !traitorState?.active) ? 1.02 : 1 }}
-                    whileTap={{ scale: (trustedCount > 0 && !traitorState?.active) ? 0.95 : 1 }}
-                    className={`w-full flex items-center justify-center gap-2 text-pixel-light font-bold py-2 px-3 border border-pixel-danger/50 rounded shadow-[0_0_10px_rgba(255,0,0,0.2)] transition-all ${
-                      (trustedCount > 0 && !traitorState?.active)
-                        ? 'bg-pixel-danger/80 hover:bg-pixel-danger' 
-                        : 'bg-pixel-muted/50 opacity-50 cursor-not-allowed'
-                    }`}
-                    onClick={() => window.api?.invokeTraitor?.()}
-                    disabled={trustedCount === 0 || traitorState?.active}
-                  >
-                    <Skull className={trustedCount > 0 && !traitorState?.active ? "animate-pulse text-red-300" : ""} size={16} />
-                    <span className="text-xs uppercase tracking-wide">Invoke Traitor</span>
-                    {trustedCount > 0 && (
-                      <span className="bg-pixel-void text-pixel-light text-[10px] px-1.5 py-0.5 rounded ml-1 shadow-[inset_0_0_5px_rgba(255,0,0,0.5)]">
-                        {trustedCount}
-                      </span>
-                    )}
-                  </motion.button>
-                </div>
               </motion.div>
             )}
 
@@ -478,6 +428,85 @@ export const SimulatorPanel: React.FC = () => {
                 </div>
               </motion.div>
             )}
+
+            {activeTab === 'debug' && (
+              <motion.div 
+                key="debug"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.2 }}
+                className="flex flex-col gap-3 absolute w-full"
+              >
+                {/* VOICE TESTER */}
+                <button
+                  onClick={() => setShowTester(true)}
+                  className="w-full bg-[#2d1b4e] hover:bg-[#432c7a] border border-[#a855f7] text-[#e9d5ff] font-bold p-2 rounded text-xs tracking-widest shadow-[0_0_10px_rgba(168,85,247,0.3)] transition-all flex items-center justify-center gap-2"
+                >
+                  <Volume2 size={16} /> МЕНЮ ТЕСТА ГОЛОСОВ (SOUNDBOARD)
+                </button>
+
+                {/* Donate Simulation */}
+                <div className="border-t border-pixel-muted/30 pt-3 flex gap-2">
+                  <motion.button
+                    whileHover={{ filter: 'brightness(1.2)' }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/50 text-green-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(34,197,94,0.3)] transition-colors"
+                    onClick={() => (window as any).api?.simulateDonation?.(100)}
+                  >
+                     💎 100₽
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ filter: 'brightness(1.2)' }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 text-red-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(239,68,68,0.3)] transition-colors"
+                    onClick={() => (window as any).api?.simulateDonation?.(300)}
+                  >
+                     🚨 300₽
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ filter: 'brightness(1.2)' }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex-1 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(234,179,8,0.3)] transition-colors"
+                    onClick={() => (window as any).api?.simulateDonation?.(500)}
+                  >
+                     👑 500₽
+                  </motion.button>
+                </div>
+
+                <motion.button
+                  whileHover={{ filter: 'brightness(1.2)' }}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/50 text-orange-400 text-xs uppercase font-bold py-2 rounded flex items-center justify-center gap-2 shadow-[0_0_5px_rgba(249,115,22,0.3)] transition-colors"
+                  onClick={() => (window as any).api?.simulatorCombo?.()}
+                >
+                   🚨 ВМЕШАТЕЛЬСТВО АМБРЕЛЛЫ
+                </motion.button>
+
+                {/* Traitor Button */}
+                <div className="border-t border-pixel-muted/30 pt-3">
+                  <motion.button
+                    whileHover={{ scale: (trustedCount > 0 && !traitorState?.active) ? 1.02 : 1 }}
+                    whileTap={{ scale: (trustedCount > 0 && !traitorState?.active) ? 0.95 : 1 }}
+                    className={`w-full flex items-center justify-center gap-2 text-pixel-light font-bold py-2 px-3 border border-pixel-danger/50 rounded shadow-[0_0_10px_rgba(255,0,0,0.2)] transition-all ${
+                      (trustedCount > 0 && !traitorState?.active)
+                        ? 'bg-pixel-danger/80 hover:bg-pixel-danger' 
+                        : 'bg-pixel-muted/50 opacity-50 cursor-not-allowed'
+                    }`}
+                    onClick={() => window.api?.invokeTraitor?.()}
+                    disabled={trustedCount === 0 || traitorState?.active}
+                  >
+                    <Skull className={trustedCount > 0 && !traitorState?.active ? "animate-pulse text-red-300" : ""} size={16} />
+                    <span className="text-xs uppercase tracking-wide">Invoke Traitor</span>
+                    {trustedCount > 0 && (
+                      <span className="bg-pixel-void text-pixel-light text-[10px] px-1.5 py-0.5 rounded ml-1 shadow-[inset_0_0_5px_rgba(255,0,0,0.5)]">
+                        {trustedCount}
+                      </span>
+                    )}
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
       </div>
@@ -533,11 +562,11 @@ export const SimulatorPanel: React.FC = () => {
       </div>
       <AnimatePresence>
         {activeTab === 'tiers' && <TiersConfigurator onClose={() => setActiveTab('control')} />}
+        {showTester && <VoiceTester onClose={() => setShowTester(false)} />}
       </AnimatePresence>
     </div>
   )
+
+
+
 }
-
-
-
-

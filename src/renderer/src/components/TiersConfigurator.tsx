@@ -113,10 +113,11 @@ const INITIAL_POOL: Effect[] = [
 
 export const TiersConfigurator: React.FC<TiersConfiguratorProps> = ({ onClose }) => {
   const [pool, setPool] = useState<Effect[]>(INITIAL_POOL);
+  const [currency, setCurrency] = useState('₽');
   const [tiers, setTiers] = useState<Tier[]>([
-    { id: 't1', name: 'Tier 1', price: '100₽', effects: [] },
-    { id: 't2', name: 'Tier 2', price: '500₽', effects: [] },
-    { id: 't3', name: 'Tier 3', price: '1000₽', effects: [] },
+    { id: 't1', name: 'Tier 1', price: '100', effects: [] },
+    { id: 't2', name: 'Tier 2', price: '500', effects: [] },
+    { id: 't3', name: 'Tier 3', price: '1000', effects: [] },
   ]);
 
   const [draggedEffect, setDraggedEffect] = useState<{ effect: Effect, source: 'pool' | string } | null>(null);
@@ -173,6 +174,12 @@ export const TiersConfigurator: React.FC<TiersConfiguratorProps> = ({ onClose })
     setDraggedEffect(null);
   };
 
+  const handlePriceChange = (tierId: string, newPrice: string) => {
+    setTiers(prev => prev.map(t => 
+      t.id === tierId ? { ...t, price: newPrice } : t
+    ));
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -180,9 +187,22 @@ export const TiersConfigurator: React.FC<TiersConfiguratorProps> = ({ onClose })
       exit={{ opacity: 0, y: 20 }}
       className="absolute inset-0 z-50 bg-pixel-panel/95 backdrop-blur-sm p-4 flex flex-col gap-2 text-pixel-cyan font-mono overflow-hidden"
     >
-      <h2 className="text-xl font-bold uppercase tracking-widest border-b border-pixel-muted pb-2">
-        Donation Tiers Configuration
-      </h2>
+      <div className="flex justify-between items-center border-b border-pixel-muted pb-2 pr-24">
+        <h2 className="text-xl font-bold uppercase tracking-widest">
+          Donation Tiers Configuration
+        </h2>
+        <select 
+          value={currency} 
+          onChange={(e) => setCurrency(e.target.value)}
+          className="bg-pixel-void border border-pixel-cyan/50 text-pixel-light text-sm outline-none px-2 py-1 rounded cursor-pointer font-mono"
+        >
+          <option value="₽">₽ (RUB)</option>
+          <option value="$">$ (USD)</option>
+          <option value="€">€ (EUR)</option>
+          <option value="₴">₴ (UAH)</option>
+          <option value="₸">₸ (KZT)</option>
+        </select>
+      </div>
 
       <div className="flex-1 min-h-0 flex gap-6 overflow-hidden">
         {/* POOL */}
@@ -224,7 +244,17 @@ export const TiersConfigurator: React.FC<TiersConfiguratorProps> = ({ onClose })
             >
               <div className="text-center mb-3 border-b border-pixel-amber/30 pb-1">
                 <h3 className="text-sm uppercase font-bold text-pixel-amber">{tier.name}</h3>
-                <span className="text-xs text-pixel-light/70">{tier.price}</span>
+                <div className="flex justify-center items-center gap-1 text-xs text-pixel-light/70 mt-1">
+                  <span>[</span>
+                  <input
+                    type="number"
+                    value={tier.price}
+                    onChange={(e) => handlePriceChange(tier.id, e.target.value)}
+                    className="bg-transparent border-b border-pixel-muted focus:border-pixel-cyan outline-none text-center w-12 appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span>]</span>
+                  <span className="ml-1 text-pixel-amber">{currency}</span>
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-1.5 pr-1 bg-pixel-panel/20 rounded p-1">
                 {tier.effects.map(effect => (

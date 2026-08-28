@@ -64,7 +64,8 @@ const api = {
     ipcRenderer.on('install:progress', (_, d) => cb(d));
   },
   saveStoredGamePath: (path: string) => ipcRenderer.invoke('setup:saveGamePath', path),
-  getStoredGamePath: () => ipcRenderer.invoke('setup:getStoredGamePath')
+  getStoredGamePath: () => ipcRenderer.invoke('setup:getStoredGamePath'),
+  launchGame: () => ipcRenderer.invoke('game:launch')
 }
 
 if (process.contextIsolated) {

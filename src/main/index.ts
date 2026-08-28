@@ -1,6 +1,7 @@
 ﻿import 'dotenv/config';
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
+import { execFile } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { ChatSimulator } from './simulator/ChatSimulator'
@@ -177,20 +178,27 @@ function createWindow(): void {
   })
 
   // Narrator: traitor starts
-  votingManager.on('traitor:start', (state) => {
-    narrator.say('traitor', state.username)
+  votingManager.on('traitor:start', () => {
+    narrator.say('traitor')
   })
 
-  // Narrator: negative effect wins
+  // Narrator: effect wins
   votingManager.on('vote:end', ({ winner }) => {
-    if (winner && winner.category === 'negative') {
+    if (!winner) return;
+    if (winner.category === 'negative') {
       narrator.say('negative_win')
+    } else if (winner.category === 'positive') {
+      narrator.say('positive_win')
     }
   })
 
   narrator.on('narrator:speak', (data) => {
     overlayServer.broadcast('narrator:speak', data)
     mainWindow.webContents.send('narrator:speak', data)
+  })
+
+  narrator.on('narrator:audio', (data) => {
+    overlayServer.broadcast('narrator:audio', data)
   })
 
   ipcMain.on('narrator:toggle', (_, val: boolean) => {
@@ -279,6 +287,37 @@ function createWindow(): void {
     overlayServer.broadcast('vote:update', emptyState)
   })
 
+  
+  // ─── AUDIO TESTER IPC ───
+  ipcMain.handle('audio:get-files', () => {
+    const base = join(process.cwd(), 'assets', 'audio')
+    const result: Record<string, string[]> = {}
+    if (fs.existsSync(base)) {
+      const folders = fs.readdirSync(base)
+      for (const f of folders) {
+        const folderPath = join(base, f)
+        if (fs.statSync(folderPath).isDirectory()) {
+          result[f] = fs.readdirSync(folderPath).filter(file => file.endsWith('.mp3') || file.endsWith('.wav') || file.endsWith('.ogg'))
+        }
+      }
+    }
+    return result
+  })
+
+  ipcMain.handle('audio:read-file', (_, folder: string, file: string) => {
+    const filePath = join(process.cwd(), 'assets', 'audio', folder, file)
+    if (fs.existsSync(filePath)) {
+      const buffer = fs.readFileSync(filePath)
+      return buffer.toString('base64')
+    }
+    return null
+  })
+
+  
+  ipcMain.handle('simulator:force-narrator', (_, type: string) => {
+    narrator.say(type)
+  })
+
   ipcMain.handle('simulator:invokeTraitor', () => {
     return votingManager.invokeTraitor()
   })
@@ -286,6 +325,26 @@ function createWindow(): void {
   ipcMain.on('simulator:donate', (_, amount) => {
     donationBridge.simulateDonation("Test_Donator", amount, "RUB", "За императора!")
   })
+
+  ipcMain.handle('game:launch', () => {
+    const configPath = join(app.getPath('userData'), 'game_config.json');
+    if (fs.existsSync(configPath)) {
+      try {
+        const conf = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (conf.gamePath) {
+          sysLogger.info(`[Game] Launching: ${conf.gamePath}`);
+          execFile(conf.gamePath, [], { cwd: require('path').dirname(conf.gamePath) }, (error) => {
+            if (error) sysLogger.error(`[Game Launch Error]: ${error.message}`);
+          });
+          return true;
+        }
+      } catch (e) {
+        sysLogger.error(`[Game Launch Error]: ${e}`);
+        return false;
+      }
+    }
+    return false;
+  });
 
   ipcMain.on('window:close', () => mainWindow.close())
   ipcMain.on('window:minimize', () => mainWindow.minimize())

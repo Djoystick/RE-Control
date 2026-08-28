@@ -25,11 +25,31 @@ interface EffectState {
   duration: number
 }
 
+
+let audioCtx: AudioContext | null = null;
+
+async function playFilteredAudio(base64: string, _type: string) {
+    // Так как фильтры Web Audio API были удалены по просьбе пользователя,
+    // мы используем стандартный, максимально надежный HTML5 Audio плеер.
+    return new Promise<void>((resolve, reject) => {
+        const audio = new Audio(`data:audio/ogg;base64,${base64}`);
+        audio.onended = () => resolve();
+        audio.onerror = (e) => reject(new Error("Audio decoding error"));
+        audio.play().catch(err => {
+            if (err.name === 'NotAllowedError') {
+                reject(new Error("БРАУЗЕР БЛОКИРУЕТ ЗВУК! КЛИКНИ МЫШКОЙ ПО ОКНУ ОВЕРЛЕЯ!"));
+            } else {
+                reject(err);
+            }
+        });
+    });
+}
+
 export default function OverlayApp() {
   const [voteState, setVoteState] = useState<VoteState | null>(null)
   const [activeEffect, setActiveEffect] = useState<EffectState | null>(null)
   const [interventionBanner, setInterventionBanner] = useState<{ type: string; message: string } | null>(null)
-  const [narratorText, setNarratorText] = useState<string | null>(null)
+  const [narratorData, setNarratorData] = useState<{ text: string, type: string } | null>(null)
   
   // Local timer for smooth countdown
   const [localTimeRemaining, setLocalTimeRemaining] = useState(0)
@@ -52,14 +72,18 @@ export default function OverlayApp() {
           } else if (msg.type === 'vote:end') {
             setVoteState(null)
             setInterventionBanner(null)
-          } else if (msg.type === 'vote:intervention') {
+                    } else if (msg.type === 'vote:intervention') {
             setInterventionBanner(msg.data)
             clearTimeout(bannerTimer)
             bannerTimer = setTimeout(() => setInterventionBanner(null), 8000)
+          } else if (msg.type === 'narrator:audio') {
+            setNarratorData({ text: msg.data.subtitle, type: msg.data.type })
+            setTimeout(() => setNarratorData(null), 6000)
+            playFilteredAudio(msg.data.base64, msg.data.type).catch(e => setNarratorData({ text: 'AUDIO ERROR: ' + e.message, type: 'veto' }))
           } else if (msg.type === 'narrator:speak') {
-            setNarratorText(msg.data.text)
+            setNarratorData({ text: msg.data.text, type: msg.data.type || 'veto' })
             clearTimeout(narratorTimer)
-            narratorTimer = setTimeout(() => setNarratorText(null), 8000)
+            narratorTimer = setTimeout(() => setNarratorData(null), 8000)
           } else if (msg.type === 'effect:start') {
             setActiveEffect(msg.data)
             // Auto hide effect after its duration
@@ -203,26 +227,35 @@ export default function OverlayApp() {
         </AnimatePresence>
       </div>
 
-      {/* Narrator subtitle — bottom center, cinematic style */}
-      <AnimatePresence>
-        {narratorText && (
-          <motion.div
-            key={narratorText}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            transition={{ duration: 0.4 }}
-            className="absolute bottom-10 left-1/2 -translate-x-1/2 max-w-2xl w-full px-6"
-          >
-            <div className="bg-black/80 border border-pixel-muted/40 rounded px-6 py-3 text-center backdrop-blur-sm shadow-[0_0_20px_rgba(0,0,0,0.8)]">
-              <p className="text-pixel-light font-mono text-sm tracking-widest uppercase leading-relaxed">
-                <span className="text-pixel-danger mr-2 text-xs">◈ UMBRELLA CORP</span>
-                {narratorText}
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              {/* Narrator subtitle — top center, bold arcade style */}
+        <AnimatePresence>
+          {narratorData && (
+            <motion.div
+              key={narratorData.text}
+              initial={{ opacity: 0, y: -50, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -50, scale: 0.9 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+              className={`absolute top-24 left-1/2 -translate-x-1/2 border-4 rounded-xl p-4 md:p-6 shadow-pixel flex items-center gap-4 md:gap-6 z-50 text-white min-w-[500px] justify-center ${
+                narratorData.type === 'positive_win' 
+                  ? 'bg-[#1e3a8a] border-pixel-cyan' 
+                  : 'bg-[#7f1d1d] border-[#111111]'
+              }`}
+            >
+              <div className={`w-4 h-4 md:w-6 md:h-6 rounded-full animate-arcade-blink flex-shrink-0 ${
+                narratorData.type === 'positive_win' ? 'bg-pixel-cyan shadow-[0_0_15px_rgba(34,211,238,0.8)]' : 'bg-white shadow-[0_0_15px_rgba(255,255,255,0.8)]'
+              }`} />
+              <div className="flex flex-col">
+                <span className={`text-[10px] tracking-[0.3em] font-bold mb-1 ${narratorData.type === 'positive_win' ? 'text-pixel-cyan' : 'text-[#a1a1aa]'}`}>
+                  {narratorData.type === 'positive_win' ? '▶ СОЮЗНИК НА СВЯЗИ' : '◈ UMBRELLA CORP'}
+                </span>
+                <h2 className="text-xl md:text-3xl font-bold tracking-widest drop-shadow-[2px_2px_0_rgba(0,0,0,1)] uppercase leading-tight">
+                  {narratorData.text}
+                </h2>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
     </div>
   )
 }

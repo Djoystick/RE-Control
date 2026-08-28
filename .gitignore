@@ -16,3 +16,10 @@ scripts/edge_tts_pkg/
 *.mp3
 patch_*.py
 fix_*.py
+
+# Local non-repo assets
+_local_assets/
+assets/audio/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

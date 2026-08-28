@@ -1,71 +1,38 @@
-﻿import { EventEmitter } from 'events'
-import { speak } from './tts'
+import * as fs from 'fs'
+import { join } from 'path'
 import { sysLogger } from '../utils/logger'
 
 // ═══════════════════════════════════════════════════════
-//  UMBRELLA CORPORATION — НАРРАТОР
-//  Пул фраз для каждого типа события. Выбирается случайная.
+//  UMBRELLA CORPORATION — AUDIO NARRATOR (WITH WEB AUDIO)
 // ═══════════════════════════════════════════════════════
 
-const PHRASES: Record<string, string[]> = {
-    veto: [
-        'Протокол семь альфа активирован. Лидирующий кандидат устранён. Испытание продолжается.',
-        'Вмешательство Амбреллы зафиксировано. Доминирующая переменная нейтрализована.',
-        'Коррекция проведена. Отклонение от нормы устранено. Наблюдение продолжается.',
-        'Аномалия ликвидирована. Эксперимент возвращён в плановые параметры.',
-        'Ваш выбор был... неудобен для корпорации. Он аннулирован.',
-    ],
-    invert: [
-        'Данные скорректированы. Управление передано меньшинству. Наблюдаем с интересом.',
-        'Инверсия применена. То, что было сильным — стало слабым. Адаптируйтесь.',
-        'Полярность изменена. Иерархия пересмотрена. Продолжайте.',
-        'Ваша самоуверенность была преждевременной. Амбрелла внесла коррективы.',
-        'Расстановка сил изменена. Аутсайдер теперь лидирует. Занятно.',
-    ],
-    blind: [
-        'Сенсорное затемнение активировано. Действуйте без информации. Это намеренно.',
-        'Визуальные данные заблокированы. Делайте выбор вслепую — как и подобает подопытным.',
-        'Информация скрыта по приказу Совета. Доверяйте своей интуиции.',
-        'Слепой протокол активен. Незнание — не недостаток. Это условие эксперимента.',
-        'Вы больше не знаете, кто лидирует. Голосуйте. Именно в этом и состоит смысл.',
-    ],
-    equalize: [
-        'Сброс завершён. Все параметры приведены к норме. Начните сначала.',
-        'Совет счёл ваши результаты неубедительными. Данные обнулены. Продолжайте.',
-        'Протокол уравнивания выполнен. Все преимущества аннулированы. Чистый эксперимент.',
-        'Паритет восстановлен. Амбрелла не терпит перекосов. Гонка начинается заново.',
-        'Память очищена. Ваш следующий выбор важнее предыдущего.',
-    ],
-    turbo: [
-        'Сжатие времени активировано. У вас пять секунд. Выбирайте с умом.',
-        'Ускоренный протокол запущен. Промедление равно провалу. Действуйте.',
-        'Совет теряет терпение. Окно голосования критически сужено.',
-        'Турбо-режим активен. Пять секунд до результата. Таймер идёт.',
-        'Протокол срочности применён. Это не учения.',
-    ],
-    traitor: [
-        'Верификация агента завершена. Единоличные полномочия активированы. Не разочаруйте нас.',
-        'Один субъект получил полный контроль. Остальные временно нерелевантны.',
-        'Протокол Предателя активирован. Один голос. Вся власть. Выбирайте осторожно.',
-        'Совет определил своего инструмента. Командование передано. Используйте его мудро.',
-        'Авторизация выдана. Амбрелла наблюдает внимательно. Не тратьте это впустую.',
-    ],
-    negative_win: [
-        'Превосходно. Субъект испытывает значительные затруднения. Данные записаны.',
-        'Оптимальный исход достигнут. Дестабилизация субъекта подтверждена. Продолжаем.',
-        'Чат принял решение. Страдание — поучительно. Амбрелла одобряет.',
-        'Негативный эффект применён. Реакция субъекта в норме. Наблюдение продолжается.',
-        'Всё идёт строго по плану.',
-    ],
+const FOLDERS: Record<string, string> = {
+    veto: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
+    invert: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
+    blind: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
+    equalize: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
+    turbo: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
+    negative_win: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
+    positive_win: join(process.cwd(), 'assets', 'audio', 'ally_radio'),
+    traitor: join(process.cwd(), 'assets', 'audio', 'traitor'),
 }
 
-function pick(pool: string[]): string {
-    return pool[Math.floor(Math.random() * pool.length)]
+const SUBTITLES: Record<string, string> = {
+    veto: 'Аномалия ликвидирована.',
+    invert: 'Иерархия пересмотрена.',
+    blind: 'Сенсорное затемнение активировано.',
+    equalize: 'Паритет восстановлен.',
+    turbo: 'Сжатие времени активировано.',
+    traitor: 'Верификация агента завершена.',
+    negative_win: 'Оптимальный исход достигнут.',
+    positive_win: 'Припасы отправлены. Держись!',
 }
+
+import { EventEmitter } from 'events'
 
 export class Narrator extends EventEmitter {
     private enabled: boolean = true
-    private cooldownMs: number = 90_000
+    private cooldownMs: number = 1000
     private lastSpokenAt: number = 0
 
     setEnabled(val: boolean) {
@@ -78,23 +45,44 @@ export class Narrator extends EventEmitter {
         return Date.now() - this.lastSpokenAt >= this.cooldownMs
     }
 
-    async say(eventType: string, username?: string) {
-        if (!this.canSpeak()) {
-            sysLogger.info(`[Narrator] Кулдаун активен, пропуск события: ${eventType}`)
-            return
-        }
+    say(eventType: string) {
+        if (!this.canSpeak()) return
 
-        const pool = PHRASES[eventType]
-        if (!pool) return
-
-        let text = pick(pool)
-        if (username) text = text.replace('{username}', username)
+        const folder = FOLDERS[eventType]
+        if (!folder || !fs.existsSync(folder)) return
 
         this.lastSpokenAt = Date.now()
-        sysLogger.info(`[Narrator] Произношу (${eventType}): ${text}`)
+        
+        try {
+            
+            let prefix = eventType;
+            if (eventType === 'negative_win') prefix = 'neg';
+            if (eventType === 'positive_win') prefix = 'pos';
+            
+            const files = fs.readdirSync(folder).filter(f => 
+                (f.endsWith('.mp3') || f.endsWith('.wav') || f.endsWith('.ogg')) &&
+                f.startsWith(prefix)
+            )
 
-        this.emit('narrator:speak', { text, eventType })
-        await speak(text)
+            if (files.length === 0) return
+            
+            const randomFile = files[Math.floor(Math.random() * files.length)]
+            const filePath = join(folder, randomFile)
+            
+            // Read file and convert to base64
+            const buffer = fs.readFileSync(filePath)
+            const base64 = buffer.toString('base64')
+            
+            // Send directly to overlay to be played with VFX
+            this.emit('narrator:audio', {
+                type: eventType,
+                subtitle: SUBTITLES[eventType] || '',
+                base64: base64
+            })
+            sysLogger.info(`[Narrator VFX] Sent audio to overlay: ${randomFile}`)
+        } catch (err: any) {
+            sysLogger.error(`[Narrator VFX Error] ${err.message}`)
+        }
     }
 }
 
