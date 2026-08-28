@@ -65,7 +65,9 @@ const api = {
   },
   saveStoredGamePath: (path: string) => ipcRenderer.invoke('setup:saveGamePath', path),
   getStoredGamePath: () => ipcRenderer.invoke('setup:getStoredGamePath'),
-  launchGame: () => ipcRenderer.invoke('game:launch')
+  launchGame: () => ipcRenderer.invoke('game:launch'),
+  getHotkeys: () => ipcRenderer.invoke('settings:getHotkeys'),
+  saveHotkeys: (hotkeys: any) => ipcRenderer.invoke('settings:saveHotkeys', hotkeys)
 }
 
 if (process.contextIsolated) {

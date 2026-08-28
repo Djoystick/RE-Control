@@ -33,6 +33,8 @@ declare global {
       onInstallProgress: (cb: (data: { percent: number; message: string }) => void) => void
       saveStoredGamePath: (path: string) => Promise<void>
       getStoredGamePath: () => Promise<string | null>
+      getHotkeys: () => Promise<{ traitor: string; intervention: string }>
+      saveHotkeys: (hotkeys: { traitor: string; intervention: string }) => Promise<void>
     }
   }
 }

@@ -26,7 +26,6 @@ interface EffectState {
 }
 
 
-let audioCtx: AudioContext | null = null;
 
 async function playFilteredAudio(base64: string, _type: string) {
     // Так как фильтры Web Audio API были удалены по просьбе пользователя,
@@ -34,7 +33,7 @@ async function playFilteredAudio(base64: string, _type: string) {
     return new Promise<void>((resolve, reject) => {
         const audio = new Audio(`data:audio/ogg;base64,${base64}`);
         audio.onended = () => resolve();
-        audio.onerror = (e) => reject(new Error("Audio decoding error"));
+        audio.onerror = () => reject(new Error("Audio decoding error"));
         audio.play().catch(err => {
             if (err.name === 'NotAllowedError') {
                 reject(new Error("БРАУЗЕР БЛОКИРУЕТ ЗВУК! КЛИКНИ МЫШКОЙ ПО ОКНУ ОВЕРЛЕЯ!"));

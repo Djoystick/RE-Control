@@ -20,10 +20,12 @@ export const SimulatorPanel: React.FC = () => {
   const [tokenStatus, setTokenStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
 
   // Tab and Bot Settings state
-  const [activeTab, setActiveTab] = useState<'control' | 'twitch' | 'tiers' | 'debug'>('control')
+  const [activeTab, setActiveTab] = useState<'control' | 'twitch' | 'tiers' | 'debug' | 'settings'>('control')
   
   const [botUsername, setBotUsername] = useState<string>('')
   const [botToken, setBotToken] = useState<string>('')
+
+  const [hotkeys, setHotkeys] = useState({ traitor: '', intervention: '' })
 
   const logsEndRef = useRef<HTMLDivElement>(null)
 
@@ -41,6 +43,10 @@ export const SimulatorPanel: React.FC = () => {
   }, [])
 
   useEffect(() => {
+    window.api?.getHotkeys?.().then((h: any) => {
+      if (h) setHotkeys(h);
+    });
+
     if (window.api) {
       window.api.onSimulatorLog?.((cmd) => {
         setLogs((prev) => [...prev, cmd])
@@ -255,6 +261,12 @@ export const SimulatorPanel: React.FC = () => {
             onClick={() => setActiveTab('debug')}
           >
             Debug
+          </button>
+          <button 
+            className={`flex-1 py-1.5 text-[10px] uppercase font-bold border rounded transition-colors ${activeTab === 'settings' ? 'bg-pixel-light/20 text-pixel-light border-pixel-light shadow-[0_0_10px_rgba(255,255,255,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/50 hover:bg-pixel-muted/20'}`}
+            onClick={() => setActiveTab('settings')}
+          >
+            Settings
           </button>
         </div>
 
@@ -517,6 +529,54 @@ export const SimulatorPanel: React.FC = () => {
                 </motion.button>
 
 
+              </motion.div>
+            )}
+
+            {activeTab === 'settings' && (
+              <motion.div 
+                key="settings"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.2 }}
+                className="flex flex-col gap-3 absolute w-full"
+              >
+                <div>
+                  <h3 className="text-xs font-bold text-pixel-light/90 uppercase mb-2">Global Hotkeys</h3>
+                  <div className="flex flex-col gap-2">
+                    <div>
+                      <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">Traitor Mode Hotkey</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
+                        value={hotkeys.traitor}
+                        onChange={(e) => setHotkeys({ ...hotkeys, traitor: e.target.value })}
+                        placeholder="e.g. num1, F1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">Umbrella Intervention Hotkey</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
+                        value={hotkeys.intervention}
+                        onChange={(e) => setHotkeys({ ...hotkeys, intervention: e.target.value })}
+                        placeholder="e.g. num2, F2"
+                      />
+                    </div>
+                    <div className="text-[9px] text-pixel-light/50 mt-1">
+                      Valid keys: num0-num9, numdec, F1-F24, CommandOrControl+Shift+T, etc.
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="w-full bg-pixel-cyan/10 hover:bg-pixel-cyan/20 border border-pixel-cyan/50 text-pixel-cyan text-xs uppercase font-bold py-1.5 rounded mt-2 shadow-[0_0_5px_rgba(34,211,238,0.3)] transition-colors"
+                      onClick={() => window.api?.saveHotkeys?.(hotkeys)}
+                    >
+                      Save Settings
+                    </motion.button>
+                  </div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
