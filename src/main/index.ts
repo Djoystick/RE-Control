@@ -1,5 +1,5 @@
 ﻿import 'dotenv/config';
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut } from 'electron'
 import { join } from 'path'
 import { execFile } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -407,6 +407,17 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
   createWindow()
+
+  // --- GLOBAL HOTKEYS FOR STREAM DECK / MACRO PADS ---
+  globalShortcut.register('CommandOrControl+Shift+T', () => {
+    sysLogger.info('[Hotkey] Ctrl+Shift+T pressed -> Invoking Traitor');
+    votingManager.invokeTraitor();
+  });
+  
+  globalShortcut.register('CommandOrControl+Shift+I', () => {
+    sysLogger.info('[Hotkey] Ctrl+Shift+I pressed -> Forcing Umbrella Intervention');
+    (votingManager as any).rollIntervention(true);
+  });
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
