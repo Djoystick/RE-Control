@@ -125,11 +125,11 @@ export default function OverlayApp() {
       <AnimatePresence>
         {activeEffect && (
           <motion.div
-            initial={{ opacity: 0, y: -50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -50, scale: 0.9 }}
+            initial={{ opacity: 0, y: -50, x: "-50%", scale: 0.75 }}
+              animate={{ opacity: 1, y: 0, x: "-50%", scale: 0.8 }}
+              exit={{ opacity: 0, y: -50, x: "-50%", scale: 0.75 }}
             transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-            className="absolute top-12 left-1/2 -translate-x-1/2 bg-pixel-danger border-4 border-pixel-dark rounded-xl p-6 shadow-pixel flex items-center gap-6 z-50 text-white"
+            className="absolute top-12 left-1/2  bg-pixel-danger border-4 border-pixel-dark rounded-xl p-6 shadow-pixel flex items-center gap-6 z-50 text-white"
           >
             <div className="w-6 h-6 rounded-full bg-white animate-arcade-blink shadow-[0_0_15px_rgba(255,255,255,0.8)]" />
             <h2 className="text-3xl font-bold tracking-widest drop-shadow-[2px_2px_0_rgba(0,0,0,1)] uppercase">
@@ -139,7 +139,7 @@ export default function OverlayApp() {
         )}
       </AnimatePresence>
 
-      <div className="absolute bottom-12 right-12 flex flex-col gap-4 items-end">
+      <div className="absolute bottom-12 right-12 flex flex-col gap-4 items-end" style={{ transform: "scale(0.75)", transformOrigin: "bottom right" }}>
         <AnimatePresence>
           {voteState?.isActive && voteState.options && (
             <motion.div
@@ -231,11 +231,11 @@ export default function OverlayApp() {
           {narratorData && (
             <motion.div
               key={narratorData.text}
-              initial={{ opacity: 0, y: -50, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -50, scale: 0.9 }}
+              initial={{ opacity: 0, y: -50, x: "-50%", scale: 0.75 }}
+              animate={{ opacity: 1, y: 0, x: "-50%", scale: 0.8 }}
+              exit={{ opacity: 0, y: -50, x: "-50%", scale: 0.75 }}
               transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-              className={`absolute top-24 left-1/2 -translate-x-1/2 border-4 rounded-xl p-4 md:p-6 shadow-pixel flex items-center gap-4 md:gap-6 z-50 text-white min-w-[500px] justify-center ${
+              className={`absolute top-24 left-1/2  border-4 rounded-xl p-4 md:p-6 shadow-pixel flex items-center gap-4 md:gap-6 z-50 text-white min-w-[500px] justify-center ${
                 narratorData.type === 'positive_win' 
                   ? 'bg-[#1e3a8a] border-pixel-cyan' 
                   : 'bg-[#7f1d1d] border-[#111111]'
