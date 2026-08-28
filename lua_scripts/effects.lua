@@ -488,4 +488,116 @@ function Effects.mute_sound()
     end)
 end
 
+
+-- === PSYCHOLOGICAL EFFECTS (Merged) ===
+Effects.active_states = {
+    blackout = 0,
+    ui_wipe = 0,
+    static_burst = 0,
+    invert = 0
+}
+
+local function get_player_gameobject()
+    local sm = sdk.get_managed_singleton("app.ropeway.SurvivorManager")
+    if not sm then return nil end
+    local player = sm:call("get_PlayerSurvivor")
+    if not player then player = sm:call("get_Survivor") end
+    if not player then player = sm:call("get_Player") end
+    
+    if player then
+        return player:call("get_GameObject")
+    end
+    return nil
+end
+
+function Effects.hop()
+    log.info("[RE:Control] Effect: hop")
+    local go = get_player_gameobject()
+    if go then
+        local transform = go:call("get_Transform")
+        if transform then
+            local pos = transform:call("get_Position")
+            pos.y = pos.y + 2.0
+            transform:call("set_Position", pos)
+        end
+    end
+end
+
+function Effects.spin_180()
+    log.info("[RE:Control] Effect: spin_180")
+    local go = get_player_gameobject()
+    if go then
+        local transform = go:call("get_Transform")
+        if transform then
+            local rot = transform:call("get_Rotation")
+            rot.y = -rot.y
+            transform:call("set_Rotation", rot)
+        end
+    end
+end
+
+function Effects.blackout()
+    log.info("[RE:Control] Effect: blackout")
+    Effects.active_states.blackout = 3.0
+end
+
+function Effects.static_burst()
+    log.info("[RE:Control] Effect: static_burst")
+    Effects.active_states.static_burst = 2.0
+end
+
+function Effects.ui_wipe()
+    log.info("[RE:Control] Effect: ui_wipe")
+    Effects.active_states.ui_wipe = 15.0
+end
+
+function Effects.fake_mrx()
+    log.info("[RE:Control] Effect: fake_mrx")
+    local wwise = sdk.get_managed_singleton("via.wwise.WwiseManager")
+    if wwise then
+        pcall(function() 
+            wwise:call("triggerObjectSE", "se_em_tyrant_step", get_player_gameobject()) 
+        end)
+    end
+end
+
+function Effects.invert_controls()
+    log.info("[RE:Control] Effect: invert_controls")
+    Effects.active_states.invert = 10.0
+end
+
+function Effects.disarm()
+    log.info("[RE:Control] Effect: disarm")
+    local inventory = get_inventory()
+    if not inventory then return end
+    pcall(function()
+        local weapon = inventory:getEquipItem()
+        if weapon and weapon:getType() == app.ropeway.ItemType.Weapon then
+            weapon:getBullets():setCurrent(0)
+        end
+    end)
+end
+
+re.on_frame(function()
+    local delta = re.get_delta_time()
+    local screen_w = 1920
+    local screen_h = 1080
+
+    if Effects.active_states.blackout > 0 then
+        Effects.active_states.blackout = Effects.active_states.blackout - delta
+        d2d.fill_rect(0, 0, screen_w, screen_h, 0xFF000000)
+    end
+
+    if Effects.active_states.static_burst > 0 then
+        Effects.active_states.static_burst = Effects.active_states.static_burst - delta
+        for i = 1, 50 do
+            local x = math.random(0, screen_w)
+            local y = math.random(0, screen_h)
+            local w = math.random(10, 300)
+            local h = math.random(5, 50)
+            d2d.fill_rect(x, y, w, h, 0x88AAAAAA)
+        end
+    end
+end)
+
 return Effects
