@@ -376,8 +376,22 @@ function createWindow(): void {
       try {
         const conf = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         if (conf.gamePath) {
-          sysLogger.info(`[Game] Launching: ${conf.gamePath}`);
-          execFile(conf.gamePath, [], { cwd: require('path').dirname(conf.gamePath) }, (error) => {
+          const exes = ['re2.exe', 're3.exe', 're4.exe', 'witcher3.exe'];
+          let targetExe = null;
+          for (const exe of exes) {
+            const possiblePath = join(conf.gamePath, exe);
+            if (fs.existsSync(possiblePath)) {
+              targetExe = possiblePath;
+              break;
+            }
+          }
+          
+          if (!targetExe) {
+            targetExe = conf.gamePath; // Fallback
+          }
+          
+          sysLogger.info(`[Game] Launching: ${targetExe}`);
+          execFile(targetExe, [], { cwd: conf.gamePath }, (error) => {
             if (error) sysLogger.error(`[Game Launch Error]: ${error.message}`);
           });
           return true;
