@@ -5,7 +5,15 @@ export class REBridge {
     private dataPath: string;
 
     constructor() {
-        this.dataPath = process.env.GAME_DATA_PATH || 'E:\\Resident Evil Village\\reframework\\data';
+        const { app } = require('electron');
+        const configPath = path.join(app.getPath('userData'), 'game_config.json');
+        let gameDir = 'C:\\';
+        try {
+            const conf = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
+            if (conf.gamePath) gameDir = conf.gamePath;
+        } catch (e) {}
+        this.dataPath = path.join(gameDir, 'reframework', 'data');
+        try { require('fs').mkdirSync(this.dataPath, { recursive: true }); } catch(e) {}
     }
 
     async sendCommand(cmd: string, _args: any = {}): Promise<string> {
