@@ -2,13 +2,23 @@
 
 -- Вспомогательные функции для получения объектов
 local function get_player()
-    local sm = app.ropeway.survivor.SurvivorManager.getSingleton()
-    return sm:getSurvivor()
+    local sm = sdk.get_managed_singleton("app.ropeway.SurvivorManager")
+    if not sm then return nil end
+    local player = sm:call("get_PlayerSurvivor")
+    if not player then player = sm:call("get_Survivor") end
+    if not player then player = sm:call("get_Player") end
+    return player
 end
 
 local function get_inventory()
-    local im = app.ropeway.InventoryManager.getSingleton()
-    return im:getInventory()
+    local player = get_player()
+    if not player then return nil end
+    local inventory = player:call("get_Inventory")
+    if not inventory then
+        local im = sdk.get_managed_singleton("app.ropeway.InventoryManager")
+        if im then inventory = im:call("get_Inventory") end
+    end
+    return inventory
 end
 
 local function get_position(player)
@@ -347,18 +357,17 @@ function Effects.push_back()
 end
 
 function Effects.auto_run()
-    log.info("[RE:Control] Активирован эффект: auto_run")
+    log.info("[RE:Control] Effect: auto_run")
     local player = get_player()
     if not player then return end
     pcall(function()
-        local params = player:getCharacterParameters()
-        local base_speed = params:getMoveSpeedRate()
-        params:setMoveSpeedRate(base_speed * 3.0)
-        local timer = app.ropeway.TimerManager.getSingleton():createTimer(3.0)
-        timer.setOnFinished(function()
-            pcall(function() params:setMoveSpeedRate(base_speed) end)
-        end)
-        timer:start()
+        local params = player:call("get_CharacterParameter") or player:call("get_CharacterStatus")
+        if not params then return end
+        local base_speed = params:call("get_MoveSpeedRate") or 1.0
+        params:call("set_MoveSpeedRate", base_speed * 3.0)
+        
+        -- Since TimerManager might be tricky, let's use our own active_states tracker!
+        Effects.active_states.auto_run = 3.0
     end)
 end
 
@@ -443,14 +452,18 @@ function Effects.papercut()
     end)
 end
 
-function Effects.empty_mag()
-    log.info("[RE:Control] Активирован эффект: empty_mag")
+function Effects.disarm()
+    log.info("[RE:Control] Effect: disarm")
     local inventory = get_inventory()
     if not inventory then return end
     pcall(function()
-        local weapon = inventory:getEquipItem()
-        if weapon and weapon:getType() == app.ropeway.ItemType.Weapon then
-            weapon:getBullets():setCurrent(0)
+        local weapon = inventory:call("get_EquipItem") or inventory:call("get_EquipWeapon")
+        if weapon then
+            local bullets = weapon:call("get_Bullets") or weapon:call("get_Ammo")
+            if bullets then
+                bullets:call("set_Current", 0)
+                bullets:call("set_Num", 0)
+            end
         end
     end)
 end
@@ -494,7 +507,9 @@ Effects.active_states = {
     blackout = 0,
     ui_wipe = 0,
     static_burst = 0,
-    invert = 0
+    invert = 0,
+    auto_run = 0,
+    base_speed = 1.0
 }
 
 local function get_player_gameobject()
@@ -571,25 +586,66 @@ function Effects.disarm()
     local inventory = get_inventory()
     if not inventory then return end
     pcall(function()
-        local weapon = inventory:getEquipItem()
-        if weapon and weapon:getType() == app.ropeway.ItemType.Weapon then
-            weapon:getBullets():setCurrent(0)
+        local weapon = inventory:call("get_EquipItem") or inventory:call("get_EquipWeapon")
+        if weapon then
+            local bullets = weapon:call("get_Bullets") or weapon:call("get_Ammo")
+            if bullets then
+                bullets:call("set_Current", 0)
+                bullets:call("set_Num", 0)
+            end
         end
     end)
 end
 
 re.on_frame(function()
     local delta = re.get_delta_time()
+    if Effects.active_states.blackout > 0 then
+        
+    end
+    if Effects.active_states.auto_run > 0 then
+        Effects.active_states.auto_run = Effects.active_states.auto_run - delta
+        if Effects.active_states.auto_run <= 0 then
+            local player = get_player()
+            if player then
+                pcall(function()
+                    local params = player:call("get_CharacterParameter") or player:call("get_CharacterStatus")
+                    if params then params:call("set_MoveSpeedRate", Effects.active_states.base_speed) end
+                end)
+            end
+        end
+    end
+
+    if Effects.active_states.static_burst > 0 then
+        
+    end
+end)
+
+re.on_draw_ui(function()
+    local screen_w = 1920
+    local screen_h = 1080
     local screen_w = 1920
     local screen_h = 1080
 
     if Effects.active_states.blackout > 0 then
-        Effects.active_states.blackout = Effects.active_states.blackout - delta
+        
         d2d.fill_rect(0, 0, screen_w, screen_h, 0xFF000000)
     end
 
+    if Effects.active_states.auto_run > 0 then
+        Effects.active_states.auto_run = Effects.active_states.auto_run - delta
+        if Effects.active_states.auto_run <= 0 then
+            local player = get_player()
+            if player then
+                pcall(function()
+                    local params = player:call("get_CharacterParameter") or player:call("get_CharacterStatus")
+                    if params then params:call("set_MoveSpeedRate", Effects.active_states.base_speed) end
+                end)
+            end
+        end
+    end
+
     if Effects.active_states.static_burst > 0 then
-        Effects.active_states.static_burst = Effects.active_states.static_burst - delta
+        
         for i = 1, 50 do
             local x = math.random(0, screen_w)
             local y = math.random(0, screen_h)
