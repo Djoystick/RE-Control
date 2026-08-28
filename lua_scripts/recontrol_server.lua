@@ -1,5 +1,6 @@
-﻿
-log.info("[RE_Control] Запуск File Bridge (Dynamic Reload)...")
+local success, effects = pcall(require, "effects")
+
+log.info("[RE_Control] Запуск File Bridge...")
 
 re.on_frame(function()
     local cmd_raw = fs.read("RE_Control_in.txt")
@@ -7,10 +8,6 @@ re.on_frame(function()
     if cmd_raw and cmd_raw ~= "" then
         fs.write("RE_Control_in.txt", "")
         cmd_raw = cmd_raw:gsub("^%s*(.-)%s*$", "%1")
-        
-        -- Динамическая перезагрузка effects.lua прямо перед выполнением!
-        package.loaded["effects"] = nil
-        local success, effects = pcall(require, "effects")
         
         local response = "UNKNOWN_COMMAND"
         

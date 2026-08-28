@@ -1,8 +1,9 @@
-﻿import fs from 'node:fs/promises';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 export class REBridge {
     private dataPath: string;
+    private queue: Promise<any> = Promise.resolve();
 
     constructor() {
         const { app } = require('electron');
@@ -17,13 +18,14 @@ export class REBridge {
     }
 
     async sendCommand(cmd: string, _args: any = {}): Promise<string> {
-        const inFile = path.join(this.dataPath, 'RE_Control_in.txt');
-        const outFile = path.join(this.dataPath, 'RE_Control_out.txt');
+        const execute = async () => {
+            const inFile = path.join(this.dataPath, 'RE_Control_in.txt');
+            const outFile = path.join(this.dataPath, 'RE_Control_out.txt');
 
-        // Отправляем просто строку команды (например "heal_full") для совместимости с Lua парсером
-        const payload = cmd;
-        
-        await fs.writeFile(inFile, payload, 'utf-8');
+            // Отправляем просто строку команды (например "heal_full") для совместимости с Lua парсером
+            const payload = cmd;
+            
+            await fs.writeFile(inFile, payload, 'utf-8');
 
         return new Promise((resolve, reject) => {
             const timeoutTime = Date.now() + 5000;
@@ -51,6 +53,11 @@ export class REBridge {
                 }
             }, 100);
         });
+        };
+
+        const resultPromise = this.queue.then(execute);
+        this.queue = resultPromise.catch(() => {});
+        return resultPromise;
     }
 }
 
