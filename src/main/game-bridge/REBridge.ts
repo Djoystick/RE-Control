@@ -57,7 +57,7 @@ export class REBridge {
 
         const resultPromise = this.queue.then(execute);
         this.queue = resultPromise.catch(() => {});
-        return resultPromise;
+        return resultPromise as Promise<string>;
     }
 }
 

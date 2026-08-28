@@ -188,7 +188,7 @@ function createWindow(): void {
     overlayServer.broadcast('chat:message', cmd)
   })
 
-  let activeTwitchChannel = '';
+  let activeTwitchChannel: string = '';
 
   // 2. Voting Manager Events route to UI and Game Bridge
   votingManager.on('vote:interrupted', () => {
@@ -377,7 +377,7 @@ function createWindow(): void {
         const conf = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         if (conf.gamePath) {
           const exes = ['re2.exe', 're3.exe', 're4.exe', 'witcher3.exe'];
-          let targetExe = null;
+          let targetExe: string = "";
           for (const exe of exes) {
             const possiblePath = join(conf.gamePath, exe);
             if (fs.existsSync(possiblePath)) {
@@ -386,7 +386,7 @@ function createWindow(): void {
             }
           }
           
-          if (!targetExe) {
+          if (targetExe === "") {
             targetExe = conf.gamePath; // Fallback
           }
           

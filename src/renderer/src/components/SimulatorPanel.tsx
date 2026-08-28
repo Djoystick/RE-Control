@@ -49,12 +49,12 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
 
     if (window.api) {
       const handleSimulatorLog = (cmd: any) => {
-        setLogs((prev) => [...prev, { ...cmd, timestamp: new Date().toLocaleTimeString() }])
+        setLogs((prev) => [...prev, { ...cmd, timestamp: new Date().toLocaleTimeString() }].slice(-100))
       }
       
       const handleSimulatorSyslog = (sys: any) => {
         if (sys?.message?.startsWith('WINNER:')) setLastWinner(sys?.message?.replace('WINNER: ', ''));
-        setLogs((prev) => [...prev, { type: 'system', message: sys?.message, timestamp: new Date().toLocaleTimeString() }])
+        setLogs((prev) => [...prev, { type: 'system', message: sys?.message, timestamp: new Date().toLocaleTimeString() }].slice(-100))
       }
 
       const handleVoteUpdate = (state: any) => {
@@ -160,8 +160,8 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
             </h3>
           </div>
           <div className="flex flex-col gap-1 overflow-y-auto min-h-0 custom-scrollbar">
-            {(traitorState?.options || []).map((opt: any) => (
-              <div key={opt?.id || Math.random()} className="bg-pixel-void/50 border border-pixel-danger/50 p-1.5 rounded text-pixel-light flex justify-between items-center text-xs">
+            {(traitorState?.options || []).map((opt: any, index: number) => (
+              <div key={opt?.id ?? index} className="bg-pixel-void/50 border border-pixel-danger/50 p-1.5 rounded text-pixel-light flex justify-between items-center text-xs">
                 <span className="font-mono">[{opt?.id}] {opt?.displayName}</span>
               </div>
             ))}
@@ -214,7 +214,7 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
         )}
         
         <div className="flex flex-col gap-1.5 overflow-y-auto custom-scrollbar flex-1 min-h-0">
-          {(voteState?.options || []).map((opt: any) => {
+          {(voteState?.options || []).map((opt: any, index: number) => {
             const percentage = ((voteState?.totalVotes || 0) > 0) 
               ? Math.round(((opt?.votes || 0) / voteState.totalVotes) * 100) 
               : 0;
@@ -226,7 +226,7 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
             const barColor = isBlind ? 'bg-pixel-danger/70' : 'bg-pixel-cyan';
 
             return (
-              <div key={opt?.id || Math.random()} className="relative z-10">
+              <div key={opt?.id ?? index} className="relative z-10">
                 <div className="flex justify-between text-[10px] font-mono text-pixel-light mb-0.5">
                   <span>[{opt?.id}] {opt?.displayName}</span>
                   <span className={isBlind ? "text-pixel-danger font-bold" : "text-pixel-cyan"}>

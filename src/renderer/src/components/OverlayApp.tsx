@@ -131,8 +131,8 @@ export default function OverlayApp() {
     if (!voteState?.isActive || localTimeRemaining <= 0) return;
     
     const interval = setInterval(() => {
-      setLocalTimeRemaining(prev => Math.max(0, prev - 100));
-    }, 100);
+      setLocalTimeRemaining(prev => Math.max(0, prev - 1000));
+    }, 1000);
     
     return () => clearInterval(interval);
   }, [voteState?.isActive, localTimeRemaining]);
