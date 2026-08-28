@@ -144,7 +144,9 @@ end
 -- 10. Резкий страх: тряска камеры и звук
 function Effects.jumpscare()
     log.info("[RE:Control] Активирован эффект: jumpscare")
-    local camera = app.ropeway.CameraManager.getSingleton():getCamera()
+    local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
+        local camera = nil
+        if cm then camera = cm:call("get_Camera") or cm:call("get_MainCamera") end
     if camera then
         camera:shake(0.5, 1.0, 15.0)
     end
@@ -318,7 +320,9 @@ end
 function Effects.drunk_camera()
     log.info("[RE:Control] Активирован эффект: drunk_camera")
     pcall(function()
-        local camera = app.ropeway.CameraManager.getSingleton():getCamera()
+        local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
+        local camera = nil
+        if cm then camera = cm:call("get_Camera") or cm:call("get_MainCamera") end
         if camera then
             camera:shake(0.2, 0.5, 10.0)
         end
@@ -374,7 +378,9 @@ end
 function Effects.fov_narrow()
     log.info("[RE:Control] Активирован эффект: fov_narrow")
     pcall(function()
-        local camera = app.ropeway.CameraManager.getSingleton():getCamera()
+        local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
+        local camera = nil
+        if cm then camera = cm:call("get_Camera") or cm:call("get_MainCamera") end
         if camera then
             local orig = camera:getFov()
             camera:setFov(orig * 0.5)
@@ -390,15 +396,14 @@ end
 function Effects.fov_wide()
     log.info("[RE:Control] Активирован эффект: fov_wide")
     pcall(function()
-        local camera = app.ropeway.CameraManager.getSingleton():getCamera()
+        local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
+        local camera = nil
+        if cm then camera = cm:call("get_Camera") or cm:call("get_MainCamera") end
         if camera then
-            local orig = camera:getFov()
-            camera:setFov(orig * 1.5)
-            local timer = app.ropeway.TimerManager.getSingleton():createTimer(10.0)
-            timer.setOnFinished(function()
-                pcall(function() camera:setFov(orig) end)
-            end)
-            timer:start()
+            local orig = camera:call("get_Fov") or 90.0
+            camera:call("set_Fov", orig * 1.5)
+            Effects.active_states.fov = 10.0
+            Effects.active_states.orig_fov = orig
         end
     end)
 end
@@ -406,7 +411,9 @@ end
 function Effects.camera_shake()
     log.info("[RE:Control] Активирован эффект: camera_shake")
     pcall(function()
-        local camera = app.ropeway.CameraManager.getSingleton():getCamera()
+        local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
+        local camera = nil
+        if cm then camera = cm:call("get_Camera") or cm:call("get_MainCamera") end
         if camera then
             camera:shake(0.5, 0.5, 5.0)
         end
@@ -615,6 +622,19 @@ re.on_frame(function()
         end
     end
 
+    if Effects.active_states.fov and Effects.active_states.fov > 0 then
+        Effects.active_states.fov = Effects.active_states.fov - delta
+        if Effects.active_states.fov <= 0 then
+            pcall(function()
+                local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
+                if cm then
+                    local camera = cm:call("get_Camera") or cm:call("get_MainCamera")
+                    if camera and Effects.active_states.orig_fov then camera:call("set_Fov", Effects.active_states.orig_fov) end
+                end
+            end)
+        end
+    end
+
     if Effects.active_states.static_burst > 0 then
         
     end
@@ -641,6 +661,19 @@ re.on_draw_ui(function()
                     if params then params:call("set_MoveSpeedRate", Effects.active_states.base_speed) end
                 end)
             end
+        end
+    end
+
+    if Effects.active_states.fov and Effects.active_states.fov > 0 then
+        Effects.active_states.fov = Effects.active_states.fov - delta
+        if Effects.active_states.fov <= 0 then
+            pcall(function()
+                local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
+                if cm then
+                    local camera = cm:call("get_Camera") or cm:call("get_MainCamera")
+                    if camera and Effects.active_states.orig_fov then camera:call("set_Fov", Effects.active_states.orig_fov) end
+                end
+            end)
         end
     end
 
