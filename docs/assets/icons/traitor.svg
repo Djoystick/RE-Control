@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%">
+  <defs>
+    <linearGradient id="skullGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f87171"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </linearGradient>
+  </defs>
+  <path d="M12 2C7.5 2 4 5.5 4 10c0 3 1.5 5.5 3.5 7v3a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-3c2-1.5 3.5-4 3.5-7 0-4.5-3.5-8-8-8z" fill="#18181b" stroke="url(#skullGrad)" stroke-width="1.5"/>
+  <circle cx="9" cy="10" r="1.8" fill="#ef4444"/>
+  <circle cx="15" cy="10" r="1.8" fill="#ef4444"/>
+  <path d="M12 13.5v1.5M10 18v2M12 18v2M14 18v2" stroke="#dc2626" stroke-width="1.2" stroke-linecap="round"/>
+  <circle cx="12" cy="11" r="10" fill="none" stroke="#ef4444" stroke-width="0.8" stroke-dasharray="4 2" opacity="0.5"/>
+</svg>

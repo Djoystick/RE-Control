@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%">
+  <defs>
+    <linearGradient id="mechGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#ef4444"/>
+    </linearGradient>
+  </defs>
+  <path d="M12 2l8 4.5v9L12 20l-8-4.5v-9L12 2z" fill="#1c1917" stroke="url(#mechGrad)" stroke-width="1.5"/>
+  <circle cx="12" cy="11" r="3" fill="#ef4444" fill-opacity="0.3" stroke="#f59e0b" stroke-width="1.2"/>
+  <path d="M12 6.5v1.5M12 14v1.5M7.5 11H9M15 11h1.5" stroke="#fcd34d" stroke-width="1.2" stroke-linecap="round"/>
+</svg>
