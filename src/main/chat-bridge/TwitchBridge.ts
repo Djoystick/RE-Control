@@ -1,6 +1,6 @@
-﻿import * as tmi from 'tmi.js';
+import * as tmi from 'tmi.js';
 import { IChatBridge, ChatCommand } from './IChatBridge';
-import { app } from 'electron';
+import { app, safeStorage } from 'electron';
 import fs from 'fs';
 import { join } from 'path';
 
@@ -17,8 +17,15 @@ export class TwitchBridge implements IChatBridge {
         if (fs.existsSync(configPath)) {
             try {
                 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-                if (config.username && config.token) {
-                    identity = { username: config.username, password: config.token };
+                let token = '';
+                if (config.isEncrypted && config.encryptedToken && safeStorage.isEncryptionAvailable()) {
+                    token = safeStorage.decryptString(Buffer.from(config.encryptedToken, 'base64'));
+                } else if (config.token) {
+                    token = config.token;
+                }
+
+                if (config.username && token) {
+                    identity = { username: config.username, password: token };
                     this.isBotAuthenticated = true;
                 }
             } catch (e) {

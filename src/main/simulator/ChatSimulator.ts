@@ -3,6 +3,8 @@ import { IChatBridge, ChatCommand } from '../chat-bridge/IChatBridge';
 export class ChatSimulator implements IChatBridge {
     private commandCallback: ((cmd: ChatCommand) => void) | null = null;
     private timer: ReturnType<typeof setInterval> | null = null;
+    private traitorTimer: ReturnType<typeof setTimeout> | null = null;
+    private activeTraitor: string | null = null;
 
     async connect(_channelOrConfig?: string): Promise<void> {
         // No real connection needed for simulator
@@ -16,17 +18,43 @@ export class ChatSimulator implements IChatBridge {
         this.commandCallback = callback;
     }
 
+    setTraitor(username: string | null): void {
+        this.activeTraitor = username;
+        if (this.traitorTimer) {
+            clearTimeout(this.traitorTimer);
+            this.traitorTimer = null;
+        }
+
+        // If a traitor bot is selected in simulation mode, have it pick a choice after 2.5 seconds
+        if (username && this.commandCallback) {
+            this.traitorTimer = setTimeout(() => {
+                if (this.activeTraitor === username && this.commandCallback) {
+                    const traitorChoice = Math.floor(Math.random() * 5) + 1; // 1 to 5
+                    this.commandCallback({
+                        username,
+                        command: traitorChoice.toString(),
+                        args: [],
+                        isTrusted: true
+                    });
+                }
+            }, 2500);
+        }
+    }
+
     startSimulating(intervalMs: number): void {
         this.stopSimulating();
-        // Simulate random viewers typing '1', '2', or '3' to vote
+        // Simulate a realistic active chat of ~30 viewers, with ~30% having VIP / Sub badges
         this.timer = setInterval(() => {
             if (this.commandCallback) {
-                const randomViewer = 'Bot_' + Math.floor(Math.random() * 10000);
+                const isTrusted = Math.random() < 0.3;
+                const botId = Math.floor(Math.random() * 30) + 1;
+                const randomViewer = isTrusted ? `VIP_Viewer_${botId}` : `Viewer_${botId}`;
                 const vote = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
                 this.commandCallback({
                     username: randomViewer,
                     command: vote.toString(),
-                    args: []
+                    args: [],
+                    isTrusted
                 });
             }
         }, intervalMs);
@@ -37,6 +65,11 @@ export class ChatSimulator implements IChatBridge {
             clearInterval(this.timer);
             this.timer = null;
         }
+        if (this.traitorTimer) {
+            clearTimeout(this.traitorTimer);
+            this.traitorTimer = null;
+        }
+        this.activeTraitor = null;
     }
 
     sendMessage(channel: string, message: string): void {

@@ -2,10 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 export class REBridge {
-    private dataPath: string;
     private queue: Promise<any> = Promise.resolve();
 
-    constructor() {
+    private getDataPath(): string {
         const { app } = require('electron');
         const configPath = path.join(app.getPath('userData'), 'game_config.json');
         let gameDir = 'C:\\';
@@ -13,14 +12,16 @@ export class REBridge {
             const conf = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
             if (conf.gamePath) gameDir = conf.gamePath;
         } catch (e) {}
-        this.dataPath = path.join(gameDir, 'reframework', 'data');
-        try { require('fs').mkdirSync(this.dataPath, { recursive: true }); } catch(e) {}
+        const dataPath = path.join(gameDir, 'reframework', 'data');
+        try { require('fs').mkdirSync(dataPath, { recursive: true }); } catch(e) {}
+        return dataPath;
     }
 
     async sendCommand(cmd: string, _args: any = {}): Promise<string> {
         const execute = async () => {
-            const inFile = path.join(this.dataPath, 'RE_Control_in.txt');
-            const outFile = path.join(this.dataPath, 'RE_Control_out.txt');
+            const dataPath = this.getDataPath();
+            const inFile = path.join(dataPath, 'RE_Control_in.txt');
+            const outFile = path.join(dataPath, 'RE_Control_out.txt');
 
             // Отправляем просто строку команды (например "heal_full") для совместимости с Lua парсером
             const payload = cmd;

@@ -1,20 +1,31 @@
 import * as fs from 'fs'
 import { join } from 'path'
+import { app } from 'electron'
 import { sysLogger } from '../utils/logger'
 
 // ═══════════════════════════════════════════════════════
 //  UMBRELLA CORPORATION — AUDIO NARRATOR (WITH WEB AUDIO)
 // ═══════════════════════════════════════════════════════
 
-const FOLDERS: Record<string, string> = {
-    veto: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
-    invert: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
-    blind: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
-    equalize: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
-    turbo: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
-    negative_win: join(process.cwd(), 'assets', 'audio', 'umbrella_hq'),
-    positive_win: join(process.cwd(), 'assets', 'audio', 'ally_radio'),
-    traitor: join(process.cwd(), 'assets', 'audio', 'traitor'),
+export function getAudioBasePath(): string {
+    if (app && app.isPackaged) {
+        const prodPath = join(process.resourcesPath, 'assets', 'audio');
+        if (fs.existsSync(prodPath)) return prodPath;
+    }
+    const appPath = app ? join(app.getAppPath(), 'assets', 'audio') : '';
+    if (appPath && fs.existsSync(appPath)) return appPath;
+    return join(process.cwd(), 'assets', 'audio');
+}
+
+const SUBFOLDER_MAP: Record<string, string> = {
+    veto: 'umbrella_hq',
+    invert: 'umbrella_hq',
+    blind: 'umbrella_hq',
+    equalize: 'umbrella_hq',
+    turbo: 'umbrella_hq',
+    negative_win: 'umbrella_hq',
+    positive_win: 'ally_radio',
+    traitor: 'traitor',
 }
 
 const SUBTITLES: Record<string, string> = {
@@ -34,10 +45,16 @@ export class Narrator extends EventEmitter {
     private enabled: boolean = true
     private cooldownMs: number = 1000
     private lastSpokenAt: number = 0
+    private volume: number = 0.8
 
     setEnabled(val: boolean) {
         this.enabled = val
         sysLogger.info(`[Narrator] ${val ? 'Включён' : 'Отключён'}`)
+    }
+
+    setVolume(val: number) {
+        this.volume = Math.max(0, Math.min(1, val))
+        sysLogger.info(`[Narrator] Громкость установлена: ${Math.round(this.volume * 100)}%`)
     }
 
     private canSpeak(): boolean {
@@ -48,8 +65,10 @@ export class Narrator extends EventEmitter {
     say(eventType: string) {
         if (!this.canSpeak()) return
 
-        const folder = FOLDERS[eventType]
-        if (!folder || !fs.existsSync(folder)) return
+        const subfolder = SUBFOLDER_MAP[eventType]
+        if (!subfolder) return
+        const folder = join(getAudioBasePath(), subfolder)
+        if (!fs.existsSync(folder)) return
 
         this.lastSpokenAt = Date.now()
         
@@ -77,9 +96,10 @@ export class Narrator extends EventEmitter {
             this.emit('narrator:audio', {
                 type: eventType,
                 subtitle: SUBTITLES[eventType] || '',
-                base64: base64
+                base64: base64,
+                volume: this.volume
             })
-            sysLogger.info(`[Narrator VFX] Sent audio to overlay: ${randomFile}`)
+            sysLogger.info(`[Narrator VFX] Sent audio to overlay: ${randomFile} (volume: ${Math.round(this.volume * 100)}%)`)
         } catch (err: any) {
             sysLogger.error(`[Narrator VFX Error] ${err.message}`)
         }

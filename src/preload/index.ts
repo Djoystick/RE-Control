@@ -7,43 +7,54 @@ const api = {
   simulatorCombo: (optionId: number) => ipcRenderer.send('simulator:combo', optionId),
   narratorToggle: (val: boolean) => ipcRenderer.send('narrator:toggle', val),
   onNarratorSpeak: (callback: (data: { text: string; eventType: string }) => void) => {
-    ipcRenderer.removeAllListeners('narrator:speak')
-    ipcRenderer.on('narrator:speak', (_, data) => callback(data))
+    const handler = (_: any, data: any) => callback(data)
+    ipcRenderer.on('narrator:speak', handler)
+    return () => ipcRenderer.removeListener('narrator:speak', handler)
   },
   updateSettings: (settings: any) => ipcRenderer.send('settings:update', settings),
   connectTwitch: (channel: string) => ipcRenderer.send('twitch:connect', channel),
   disconnectTwitch: () => ipcRenderer.send('twitch:disconnect'),
   onTwitchStatus: (callback: (status: any) => void) => {
-    ipcRenderer.removeAllListeners('twitch:status')
-    ipcRenderer.on('twitch:status', (_, status) => callback(status))
+    const handler = (_: any, status: any) => callback(status)
+    ipcRenderer.on('twitch:status', handler)
+    return () => ipcRenderer.removeListener('twitch:status', handler)
   },
   closeWindow: () => ipcRenderer.send('window:close'),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   onSimulatorLog: (callback: (cmd: any) => void) => {
-    ipcRenderer.removeAllListeners('simulator:log')
-    ipcRenderer.on('simulator:log', (_, cmd) => callback(cmd))
+    const handler = (_: any, cmd: any) => callback(cmd)
+    ipcRenderer.on('simulator:log', handler)
+    return () => ipcRenderer.removeListener('simulator:log', handler)
   },
   onSimulatorSyslog: (callback: (data: any) => void) => {
-    ipcRenderer.removeAllListeners('simulator:syslog')
-    ipcRenderer.on('simulator:syslog', (_, data) => callback(data))
+    const handler = (_: any, data: any) => callback(data)
+    ipcRenderer.on('simulator:syslog', handler)
+    return () => ipcRenderer.removeListener('simulator:syslog', handler)
   },
   onVoteUpdate: (callback: (state: any) => void) => {
-    ipcRenderer.removeAllListeners('vote:update')
-    ipcRenderer.on('vote:update', (_, state) => callback(state))
+    const handler = (_: any, state: any) => callback(state)
+    ipcRenderer.on('vote:update', handler)
+    return () => ipcRenderer.removeListener('vote:update', handler)
   },
   invokeTraitor: () => ipcRenderer.invoke('simulator:invokeTraitor'),
   simulateDonation: (amount: number) => ipcRenderer.send('simulator:donate', amount),
   onTraitorStart: (callback: (state: any) => void) => {
-    ipcRenderer.removeAllListeners('traitor:start')
-    ipcRenderer.on('traitor:start', (_, state) => callback(state))
+    const handler = (_: any, state: any) => callback(state)
+    ipcRenderer.on('traitor:start', handler)
+    return () => ipcRenderer.removeListener('traitor:start', handler)
   },
   onTraitorEnd: (callback: (state: any) => void) => {
-    ipcRenderer.removeAllListeners('traitor:end')
-    ipcRenderer.on('traitor:end', (_, state) => callback(state))
+    const handler = (_: any, state: any) => callback(state)
+    ipcRenderer.on('traitor:end', handler)
+    return () => ipcRenderer.removeListener('traitor:end', handler)
   },
   onTrustedCount: (callback: (count: number) => void) => {
-    ipcRenderer.removeAllListeners('trusted:count')
-    ipcRenderer.on('trusted:count', (_, count) => callback(count))
+    const handler = (_: any, count: any) => callback(count)
+    ipcRenderer.on('trusted:count', handler)
+    return () => ipcRenderer.removeListener('trusted:count', handler)
+  },
+  removeListener: (channel: string, listener: (...args: any[]) => void) => {
+    ipcRenderer.removeListener(channel, listener)
   },
   getLeaderboard: () => ipcRenderer.invoke('db:getLeaderboard'),
   saveTwitchAuth: (username: string, token: string, channel: string) => ipcRenderer.invoke('settings:saveTwitchAuth', { username, token, channel }),
@@ -60,14 +71,25 @@ const api = {
   updateScripts: (gamePath: string) =>
     ipcRenderer.invoke('setup:updateScripts', { gamePath }),
   onInstallProgress: (cb: (data: { percent: number; message: string }) => void) => {
-    ipcRenderer.removeAllListeners('install:progress');
-    ipcRenderer.on('install:progress', (_, d) => cb(d));
+    const handler = (_: any, d: any) => cb(d)
+    ipcRenderer.on('install:progress', handler)
+    return () => ipcRenderer.removeListener('install:progress', handler)
   },
   saveStoredGamePath: (path: string) => ipcRenderer.invoke('setup:saveGamePath', path),
   getStoredGamePath: () => ipcRenderer.invoke('setup:getStoredGamePath'),
   launchGame: () => ipcRenderer.invoke('game:launch'),
   getHotkeys: () => ipcRenderer.invoke('settings:getHotkeys'),
-  saveHotkeys: (hotkeys: any) => ipcRenderer.invoke('settings:saveHotkeys', hotkeys)
+  saveHotkeys: (hotkeys: any) => ipcRenderer.invoke('settings:saveHotkeys', hotkeys),
+  getVolume: () => ipcRenderer.invoke('settings:getVolume'),
+  setVolume: (volume: number) => ipcRenderer.invoke('settings:setVolume', volume),
+  getObsStatus: () => ipcRenderer.invoke('obs:getStatus'),
+  onObsStatus: (cb: (data: { connected: boolean; count: number }) => void) => {
+    const handler = (_: any, d: any) => cb(d)
+    ipcRenderer.on('obs:status', handler)
+    return () => ipcRenderer.removeListener('obs:status', handler)
+  },
+  getRemoteInfo: () => ipcRenderer.invoke('remote:getInfo'),
+  triggerEffect: (effectId: string) => ipcRenderer.invoke('remote:triggerEffect', effectId)
 }
 
 if (process.contextIsolated) {

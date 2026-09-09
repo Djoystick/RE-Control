@@ -189,7 +189,7 @@ export const TiersConfigurator: React.FC<TiersConfiguratorProps> = ({ onClose })
     >
       <div className="flex justify-between items-center border-b border-pixel-muted pb-2 pr-24">
         <h2 className="text-xl font-bold uppercase tracking-widest">
-          Donation Tiers Configuration
+          Настройка тиров донатов
         </h2>
         <select 
           value={currency} 
@@ -270,7 +270,7 @@ export const TiersConfigurator: React.FC<TiersConfiguratorProps> = ({ onClose })
                   </Tooltip>
                 ))}
                 {tier.effects.length === 0 && (
-                  <div className="text-[10px] text-pixel-muted text-center mt-4 uppercase">Drag effects here</div>
+                  <div className="text-[10px] text-pixel-muted text-center mt-4 uppercase">Перетащите эффекты сюда</div>
                 )}
               </div>
             </div>
@@ -284,13 +284,13 @@ export const TiersConfigurator: React.FC<TiersConfiguratorProps> = ({ onClose })
           onClick={onClose}
           className="flex items-center gap-2 px-4 py-2 bg-pixel-void border border-pixel-muted text-pixel-light/70 hover:bg-pixel-muted/20 hover:text-pixel-light rounded text-xs uppercase font-bold transition-colors"
         >
-          <X size={14} /> Back
+          <X size={14} /> Назад
         </button>
         <button 
           onClick={onClose}
           className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/50 text-green-400 hover:bg-green-500/20 rounded text-xs uppercase font-bold transition-colors shadow-[0_0_10px_rgba(34,197,94,0.2)]"
         >
-          <Check size={14} /> Save & Close
+          <Check size={14} /> Сохранить и закрыть
         </button>
       </div>
     </motion.div>

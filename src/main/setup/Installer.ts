@@ -25,7 +25,7 @@ interface AppConfig {
 }
 
 function getConfigPath(): string {
-  return path.join(app.getPath('userData'), 'config.json');
+  return path.join(app.getPath('userData'), 'game_config.json');
 }
 
 function saveConfig(data: Partial<AppConfig>): void {

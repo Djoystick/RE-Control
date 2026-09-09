@@ -8,7 +8,10 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        pixel: ['"Silkscreen"', '"DotGothic16"', '"Press Start 2P"', 'cursive'],
+        sans: ['"Exo 2"', 'system-ui', 'sans-serif'],
+        heading: ['"Orbitron"', '"Exo 2"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
+        pixel: ['"Orbitron"', '"Exo 2"', 'sans-serif'],
       },
             animation: {
         'crt-flicker': 'crt-flicker 0.15s infinite',

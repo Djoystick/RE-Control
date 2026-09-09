@@ -1,11 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Play, Square, Clock, Skull, Loader2, Radio, CheckCircle2, XCircle, Radar, Volume2 } from 'lucide-react'
+import { 
+  Play, 
+  Square, 
+  Clock, 
+  Skull, 
+  Loader2, 
+  Radio, 
+  CheckCircle2, 
+  XCircle, 
+  Radar, 
+  Volume2, 
+  Tv, 
+  Flame, 
+  Sparkles, 
+  Trash2, 
+  Copy, 
+  Check, 
+  Gamepad2,
+  Smartphone,
+  QrCode,
+  ExternalLink,
+  Zap 
+} from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { TiersConfigurator } from './TiersConfigurator'
 import { VoiceTester } from './VoiceTester'
 
 export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReinstall }) => {
-  const [logs, setLogs] = useState<any[]>([ { type: 'system', message: 'RE:CONTROL BRIDGE INITIALIZED', timestamp: new Date().toLocaleTimeString() } ])
+  const [logs, setLogs] = useState<any[]>([ 
+    { type: 'system', message: 'МОСТ RE:CONTROL ИНИЦИАЛИЗИРОВАН', timestamp: new Date().toLocaleTimeString() } 
+  ])
   const [voteState, setVoteState] = useState<any>(null)
   const [twitchChannel, setTwitchChannel] = useState<string>('')
   const [twitchStatus, setTwitchStatus] = useState<{connected: boolean, channel: string, botAuthenticated?: boolean}>({connected: false, channel: ''})
@@ -16,6 +40,13 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
   const [trustedCount, setTrustedCount] = useState<number>(0)
   const [showTester, setShowTester] = useState<boolean>(false)
   
+  // HUD & Volume States
+  const [streamMode, setStreamMode] = useState<'live' | 'sandbox'>('live')
+  const [obsStatus, setObsStatus] = useState<{ connected: boolean; count: number }>({ connected: false, count: 0 })
+  const [masterVolume, setMasterVolume] = useState<number>(80)
+  const [copiedOverlay, setCopiedOverlay] = useState<boolean>(false)
+  const [logFilter, setLogFilter] = useState<'all' | 'system' | 'chat'>('all')
+
   // Token validation state
   const [tokenStatus, setTokenStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
 
@@ -26,6 +57,9 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
   const [botToken, setBotToken] = useState<string>('')
 
   const [hotkeys, setHotkeys] = useState({ traitor: '', intervention: '' })
+  const [remoteInfo, setRemoteInfo] = useState<{ url: string; qr: string; clients: number } | null>(null)
+  const [copiedRemote, setCopiedRemote] = useState<boolean>(false)
+  const [testSuccessEffect, setTestSuccessEffect] = useState<string | null>(null)
 
   const logsEndRef = useRef<HTMLDivElement>(null)
 
@@ -47,68 +81,84 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
       if (h) setHotkeys(h);
     });
 
-    if (window.api) {
-      const handleSimulatorLog = (cmd: any) => {
-        setLogs((prev) => [...prev, { ...cmd, timestamp: new Date().toLocaleTimeString() }].slice(-100))
-      }
-      
-      const handleSimulatorSyslog = (sys: any) => {
-        if (sys?.message?.startsWith('WINNER:')) setLastWinner(sys?.message?.replace('WINNER: ', ''));
-        setLogs((prev) => [...prev, { type: 'system', message: sys?.message, timestamp: new Date().toLocaleTimeString() }].slice(-100))
-      }
+    // Load initial volume & OBS status
+    window.api?.getVolume?.().then((v: number) => {
+      if (typeof v === 'number') setMasterVolume(v);
+    });
 
-      const handleVoteUpdate = (state: any) => {
-        setVoteState(state)
-      }
+    window.api?.getObsStatus?.().then((status: any) => {
+      if (status) setObsStatus(status);
+    });
 
-      const handleTwitchStatus = (status: any) => {
-        if (status) setTwitchStatus(status)
-      }
-      
-      const handleTraitorStart = (state: any) => {
-        setTraitorState(state)
-      }
-      
-      const handleTraitorEnd = () => {
-        setTraitorState(null)
-      }
-      
-      const handleTrustedCount = (count: any) => {
-        setTrustedCount(count)
-      }
+    const fetchRemote = () => {
+      window.api?.getRemoteInfo?.().then((info: any) => {
+        if (info) setRemoteInfo(info);
+      });
+    };
+    fetchRemote();
+    const remoteInterval = setInterval(fetchRemote, 6000);
 
-      window.api.onSimulatorLog?.(handleSimulatorLog)
-      window.api.onSimulatorSyslog?.(handleSimulatorSyslog)
-      window.api.onVoteUpdate?.(handleVoteUpdate)
-      window.api.onTwitchStatus?.(handleTwitchStatus)
-      window.api.onTraitorStart?.(handleTraitorStart)
-      window.api.onTraitorEnd?.(handleTraitorEnd)
-      window.api.onTrustedCount?.(handleTrustedCount)
+    if (!window.api) return;
 
-      window.api.updateSettings?.({ cooldownMs: 600000 })
-      
-      // Load initial twitch auth if available
-      if (window.api.getTwitchAuth) {
-        window.api.getTwitchAuth().then((auth: any) => {
-          if (auth) {
-            setBotUsername(auth.username || '')
-            setBotToken(auth.token || '')
-            if (auth.channel) setTwitchChannel(auth.channel)
-          }
-        })
-      }
+    const handleSimulatorLog = (cmd: any) => {
+      setLogs((prev) => [...prev, { ...cmd, timestamp: new Date().toLocaleTimeString() }].slice(-100))
+    }
+    
+    const handleSimulatorSyslog = (sys: any) => {
+      if (sys?.message?.startsWith('WINNER:')) setLastWinner(sys?.message?.replace('WINNER: ', ''));
+      setLogs((prev) => [...prev, { type: 'system', message: sys?.message, timestamp: new Date().toLocaleTimeString() }].slice(-100))
+    }
 
-      return () => {
-        if (window.api.removeListener) {
-          window.api.removeListener('simulator-log', handleSimulatorLog)
-          window.api.removeListener('simulator-syslog', handleSimulatorSyslog)
-          window.api.removeListener('vote-update', handleVoteUpdate)
-          window.api.removeListener('twitch-status', handleTwitchStatus)
-          window.api.removeListener('traitor-start', handleTraitorStart)
-          window.api.removeListener('traitor-end', handleTraitorEnd)
-          window.api.removeListener('trusted-count', handleTrustedCount)
+    const handleVoteUpdate = (state: any) => {
+      setVoteState(state)
+    }
+
+    const handleTwitchStatus = (status: any) => {
+      if (status) setTwitchStatus(status)
+    }
+    
+    const handleTraitorStart = (state: any) => {
+      setTraitorState(state)
+    }
+    
+    const handleTraitorEnd = () => {
+      setTraitorState(null)
+    }
+    
+    const handleTrustedCount = (count: any) => {
+      setTrustedCount(count)
+    }
+
+    const handleObsStatus = (status: { connected: boolean; count: number }) => {
+      if (status) setObsStatus(status)
+    }
+
+    const unsubs: (() => void)[] = []
+    if (window.api.onSimulatorLog) unsubs.push(window.api.onSimulatorLog(handleSimulatorLog) as any)
+    if (window.api.onSimulatorSyslog) unsubs.push(window.api.onSimulatorSyslog(handleSimulatorSyslog) as any)
+    if (window.api.onVoteUpdate) unsubs.push(window.api.onVoteUpdate(handleVoteUpdate) as any)
+    if (window.api.onTwitchStatus) unsubs.push(window.api.onTwitchStatus(handleTwitchStatus) as any)
+    if (window.api.onTraitorStart) unsubs.push(window.api.onTraitorStart(handleTraitorStart) as any)
+    if (window.api.onTraitorEnd) unsubs.push(window.api.onTraitorEnd(handleTraitorEnd) as any)
+    if (window.api.onTrustedCount) unsubs.push(window.api.onTrustedCount(handleTrustedCount) as any)
+    if (window.api.onObsStatus) unsubs.push(window.api.onObsStatus(handleObsStatus) as any)
+
+    window.api.updateSettings?.({ cooldownMs: 600000 })
+    
+    // Load initial twitch auth if available
+    if (window.api.getTwitchAuth) {
+      window.api.getTwitchAuth().then((auth: any) => {
+        if (auth) {
+          setBotUsername(auth.username || '')
+          setBotToken(auth.token || '')
+          if (auth.channel) setTwitchChannel(auth.channel)
         }
-      }
+      })
+    }
+
+    return () => {
+      clearInterval(remoteInterval)
+      unsubs.forEach(u => typeof u === 'function' && u())
     }
   }, [])
 
@@ -138,6 +188,23 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
     return () => clearTimeout(timer)
   }, [botToken])
 
+  const handleVolumeChange = (newVol: number) => {
+    setMasterVolume(newVol)
+    window.api?.setVolume?.(newVol)
+  }
+
+  const copyOverlayLink = () => {
+    navigator.clipboard.writeText('http://localhost:5174/overlay.html')
+    setCopiedOverlay(true)
+    setTimeout(() => setCopiedOverlay(false), 2000)
+  }
+
+  const filteredLogs = logs.filter(log => {
+    if (logFilter === 'system') return log.type === 'system';
+    if (logFilter === 'chat') return log.type !== 'system';
+    return true;
+  })
+
   const renderVotingUI = () => {
     if (traitorState?.active) {
       return (
@@ -147,16 +214,16 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
           className="bg-pixel-danger/20 border border-pixel-danger p-3 rounded relative overflow-hidden flex flex-col h-full shadow-[0_0_15px_rgba(220,38,38,0.5)]"
         >
           <div className="flex justify-between items-center mb-2 border-b border-pixel-danger/50 pb-1">
-            <div className="text-pixel-danger font-bold flex items-center gap-2 text-sm">
-              <Skull className="animate-pulse" size={16} /> TRAITOR MODE
+            <div className="text-pixel-danger font-bold flex items-center gap-2 text-xs">
+              <Skull className="animate-pulse" size={16} /> РЕЖИМ ПРЕДАТЕЛЯ
             </div>
             <div className="text-pixel-light font-mono font-bold text-sm">
-              {Math.ceil((traitorState.timeRemainingMs || 0) / 1000)}s
+              {Math.ceil((traitorState.timeRemainingMs || 0) / 1000)}с
             </div>
           </div>
           <div className="text-center mb-2">
-            <h3 className="text-pixel-light font-bold text-sm uppercase ">
-              💀 ПРЕДАТЕЛЬ <span className="text-pixel-amber">@{traitorState.username || 'UNKNOWN'}</span> ПОЛУЧИЛ ВЛАСТЬ! 💀
+            <h3 className="text-pixel-light font-bold text-xs uppercase">
+              💀 ПРЕДАТЕЛЬ <span className="text-pixel-amber">@{traitorState.username || 'НЕИЗВЕСТНО'}</span> ПОЛУЧИЛ ВЛАСТЬ! 💀
             </h3>
           </div>
           <div className="flex flex-col gap-1 overflow-y-auto min-h-0 custom-scrollbar">
@@ -177,12 +244,16 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
           <motion.span 
             animate={{ opacity: [0.5, 1, 0.5] }} 
             transition={{ repeat: Infinity, duration: 1 }}
-            className="text-pixel-light text-xs uppercase tracking-widest "
+            className="text-pixel-light text-xs uppercase tracking-widest font-bold"
           >
-            Cooldown Active
+            Ожидание следующего раунда
           </motion.span>
-          <span className="text-[10px] text-pixel-cyan mt-1">Waiting for next vote...</span>
-          {lastWinner && <div className="mt-1 text-pixel-danger font-bold uppercase text-[10px]">Last Winner: {lastWinner}</div>}
+          <span className="text-xs text-pixel-cyan mt-1.5">Голосование начнётся по таймеру или донату...</span>
+          {lastWinner && (
+            <div className="mt-1.5 text-pixel-danger font-bold font-heading uppercase text-xs">
+              Победитель: {lastWinner}
+            </div>
+          )}
         </div>
       )
     }
@@ -194,11 +265,11 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
         className="bg-pixel-void border border-pixel-amber p-3 rounded relative overflow-hidden shadow-[0_0_10px_rgba(245,158,11,0.3)] flex flex-col min-h-0"
       >
         <div className="flex justify-between items-center mb-2 border-b border-pixel-amber/30 pb-1 flex-shrink-0">
-          <div className="text-pixel-amber font-bold flex items-center gap-2 text-xs">
-            <Radio className="animate-pulse" size={14} /> VOTE IN PROGRESS
+          <div className="text-pixel-amber font-bold font-heading flex items-center gap-2 text-xs tracking-wide">
+            <Radio className="animate-pulse" size={14} /> ИДЁТ ГОЛОСОВАНИЕ
           </div>
-          <div className="text-pixel-danger font-mono font-bold animate-pulse text-sm">
-            {Math.ceil((voteState?.timeRemainingMs || 0) / 1000)}s
+          <div className="text-pixel-danger font-mono font-bold animate-pulse text-base">
+            {Math.ceil((voteState?.timeRemainingMs || 0) / 1000)}с
           </div>
         </div>
 
@@ -207,7 +278,7 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, filter: ['brightness(1)', 'brightness(1.5)', 'brightness(1)'] }}
             transition={{ duration: 0.5, repeat: Infinity, repeatType: 'reverse' }}
-            className="bg-pixel-danger/20 border border-pixel-danger text-pixel-danger font-bold text-[10px] uppercase p-1.5 mb-2 text-center rounded shadow-[0_0_10px_rgba(220,38,38,0.3)] flex-shrink-0"
+            className="bg-pixel-danger/20 border border-pixel-danger text-pixel-danger font-bold font-heading text-xs uppercase p-2 mb-2 text-center rounded shadow-[0_0_10px_rgba(220,38,38,0.3)] flex-shrink-0"
           >
             ⚠️ {voteState.intervention.message}
           </motion.div>
@@ -250,428 +321,805 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
   }
 
   return (
-    <div className="bg-pixel-panel border border-pixel-border rounded-lg shadow-pixel p-4 relative h-full grid grid-cols-12 gap-4 overflow-hidden">
+    <div className="bg-pixel-panel border border-pixel-border rounded-lg shadow-pixel p-3 relative h-full flex flex-col gap-2 overflow-hidden">
       <div className="absolute inset-0 pointer-events-none opacity-10 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABZJREFUeNpi2r9//38bIxsDBBgAEGAAZTwF85bZzQ8AAAAASUVORK5CYII=')]"></div>
       
-      {/* LEFT COLUMN: Controls */}
-      <div className="col-span-5 flex flex-col gap-3 relative z-10 overflow-hidden bg-pixel-void/40 p-3 rounded border border-pixel-border/50 h-full">
+      {/* TOP HUD BAR: Mode Switcher, Status Badges, Master Volume */}
+      <div className="relative z-10 flex items-center justify-between bg-pixel-void/70 border border-pixel-border/80 px-2.5 py-1 rounded text-xs gap-2 flex-shrink-0">
         
-        {/* TABS */}
-        <div className="flex gap-2 flex-shrink-0 mb-3">
-          <button 
-            className={`flex-1 py-1.5 text-[10px] uppercase font-bold border rounded transition-colors ${activeTab === 'control' ? 'bg-pixel-amber/20 text-pixel-amber border-pixel-amber shadow-[0_0_10px_rgba(245,158,11,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/50 hover:bg-pixel-muted/20'}`}
-            onClick={() => setActiveTab('control')}
+        {/* Left: Mode Toggle (LIVE vs SANDBOX) */}
+        <div className="flex items-center gap-1 bg-pixel-panel/80 p-0.5 rounded border border-pixel-muted/40 flex-shrink-0">
+          <button
+            onClick={() => setStreamMode('live')}
+            className={`px-2.5 py-1 rounded text-xs font-bold uppercase transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              streamMode === 'live'
+                ? 'bg-pixel-danger text-pixel-light shadow-[0_0_10px_rgba(239,68,68,0.5)]'
+                : 'text-pixel-light/50 hover:text-pixel-light'
+            }`}
           >
-            Control
+            <span className={`w-2 h-2 rounded-full ${streamMode === 'live' ? 'bg-white animate-ping' : 'bg-pixel-muted'}`} />
+            🔴 СТРИМ (LIVE)
           </button>
-          <button 
-            className={`flex-1 py-1.5 text-[10px] uppercase font-bold border rounded transition-colors ${activeTab === 'twitch' ? 'bg-[#6441a5]/20 text-[#6441a5] border-[#6441a5] shadow-[0_0_10px_rgba(100,65,165,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/50 hover:bg-pixel-muted/20'}`}
-            onClick={() => setActiveTab('twitch')}
+          <button
+            onClick={() => setStreamMode('sandbox')}
+            className={`px-2.5 py-1 rounded text-xs font-bold uppercase transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              streamMode === 'sandbox'
+                ? 'bg-pixel-cyan text-pixel-void shadow-[0_0_10px_rgba(34,211,238,0.5)]'
+                : 'text-pixel-light/50 hover:text-pixel-light'
+            }`}
           >
-            Twitch
-          </button>
-          <button 
-            className={`flex-1 py-1.5 text-[10px] uppercase font-bold border rounded transition-colors ${activeTab === 'tiers' ? 'bg-pixel-cyan/20 text-pixel-cyan border-pixel-cyan shadow-[0_0_10px_rgba(56,189,248,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/50 hover:bg-pixel-muted/20'}`}
-            onClick={() => setActiveTab('tiers')}
-          >
-            Tiers
-          </button>
-          <button 
-            className={`flex-1 py-1.5 text-[10px] uppercase font-bold border rounded transition-colors ${activeTab === 'debug' ? 'bg-pixel-danger/20 text-pixel-danger border-pixel-danger shadow-[0_0_10px_rgba(220,38,38,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/50 hover:bg-pixel-muted/20'}`}
-            onClick={() => setActiveTab('debug')}
-          >
-            Debug
-          </button>
-          <button 
-            className={`flex-1 py-1.5 text-[10px] uppercase font-bold border rounded transition-colors ${activeTab === 'settings' ? 'bg-pixel-light/20 text-pixel-light border-pixel-light shadow-[0_0_10px_rgba(255,255,255,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/50 hover:bg-pixel-muted/20'}`}
-            onClick={() => setActiveTab('settings')}
-          >
-            Settings
+            <Sparkles size={12} />
+            🧪 ПЕСОЧНИЦА
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-1 min-h-0 relative">
-          <AnimatePresence mode="wait">
-            {activeTab === 'control' && (
-              <motion.div 
-                key="control"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                transition={{ duration: 0.2 }}
-                className="flex flex-col gap-3 absolute w-full"
-              >
-                {/* Launch Game Button */}
+        {/* Center: Status Badges (Twitch, OBS, RE Engine) */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* Twitch Badge */}
+          <div 
+            className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-semibold uppercase whitespace-nowrap ${
+              twitchStatus.connected 
+                ? 'bg-[#6441a5]/20 border-[#6441a5] text-purple-300' 
+                : 'bg-pixel-void border-pixel-muted/40 text-pixel-light/50'
+            }`}
+            title={twitchStatus.connected ? `Twitch: @${twitchStatus.channel}` : 'Twitch отключен'}
+          >
+            <Radar size={11} className={twitchStatus.connected ? 'text-purple-400 animate-pulse' : ''} />
+            <span>{twitchStatus.connected ? `@${twitchStatus.channel}` : 'TWITCH: ВЫКЛ'}</span>
+          </div>
+
+          {/* OBS Overlay Badge */}
+          <div 
+            onClick={copyOverlayLink}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-semibold uppercase whitespace-nowrap cursor-pointer transition-all ${
+              obsStatus.connected 
+                ? 'bg-green-500/20 border-green-500 text-green-300 hover:bg-green-500/30 shadow-[0_0_8px_rgba(34,197,94,0.3)]' 
+                : 'bg-pixel-void border-pixel-muted/40 text-pixel-light/50 hover:border-pixel-cyan/40 hover:text-pixel-cyan'
+            }`}
+            title="Кликните, чтобы скопировать ссылку оверлея для OBS"
+          >
+            <Tv size={11} className={obsStatus.connected ? 'text-green-400' : ''} />
+            <span>OBS: {obsStatus.connected ? `В СЕТИ (${obsStatus.count})` : 'ВЫКЛ'}</span>
+            {copiedOverlay ? <Check size={11} className="text-green-400" /> : <Copy size={10} className="opacity-60" />}
+          </div>
+
+          {/* RE Engine Badge */}
+          <div 
+            className="flex items-center gap-1 px-2 py-0.5 rounded border border-pixel-cyan/40 bg-pixel-cyan/10 text-pixel-cyan text-[11px] font-semibold uppercase whitespace-nowrap flex-shrink-0"
+            title="Мост RE Engine активен"
+          >
+            <Gamepad2 size={11} />
+            <span>RE ENGINE</span>
+          </div>
+        </div>
+
+        {/* Right: Master Narrator Volume Slider */}
+        <div className="flex items-center gap-1.5 bg-pixel-panel/80 px-2 py-1 rounded border border-pixel-muted/40 flex-shrink-0">
+          <Volume2 size={12} className="text-pixel-cyan" />
+          <span className="text-[11px] uppercase font-bold text-pixel-light/85 whitespace-nowrap">ЗВУК:</span>
+          <input 
+            type="range" 
+            min={0} 
+            max={100} 
+            value={masterVolume} 
+            onChange={(e) => handleVolumeChange(Number(e.target.value))}
+            className="w-14 accent-pixel-cyan h-1 cursor-pointer bg-pixel-void rounded"
+            title="Регулировка громкости диктора в оверлее и саундборде"
+          />
+          <span className="text-xs font-mono text-pixel-cyan font-bold w-7 text-right">{masterVolume}%</span>
+        </div>
+
+      </div>
+
+      {/* MAIN TWO-COLUMN BODY */}
+      <div className="relative z-10 grid grid-cols-12 gap-3 flex-1 min-h-0 overflow-hidden">
+        
+        {/* LEFT COLUMN: Controls & Tabs */}
+        <div className="col-span-5 flex flex-col gap-2 relative overflow-hidden bg-pixel-void/40 p-2.5 rounded border border-pixel-border/50 h-full">
+          
+          {/* TABS */}
+          <div className="flex gap-1 flex-shrink-0 mb-1">
+            <button 
+              className={`flex-1 py-1 px-1 text-[11px] uppercase font-bold tracking-tight border rounded transition-colors whitespace-nowrap text-center ${activeTab === 'control' ? 'bg-pixel-amber/20 text-pixel-amber border-pixel-amber shadow-[0_0_10px_rgba(245,158,11,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/60 hover:bg-pixel-muted/20'}`}
+              onClick={() => setActiveTab('control')}
+              title="Панель управления событиями"
+            >
+              ПУЛЬТ
+            </button>
+            <button 
+              className={`flex-1 py-1 px-1 text-[11px] uppercase font-bold tracking-tight border rounded transition-colors whitespace-nowrap text-center ${activeTab === 'twitch' ? 'bg-[#6441a5]/20 text-[#6441a5] border-[#6441a5] shadow-[0_0_10px_rgba(100,65,165,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/60 hover:bg-pixel-muted/20'}`}
+              onClick={() => setActiveTab('twitch')}
+              title="Подключение канала Twitch"
+            >
+              TWITCH
+            </button>
+            <button 
+              className={`flex-1 py-1 px-1 text-[11px] uppercase font-bold tracking-tight border rounded transition-colors whitespace-nowrap text-center ${activeTab === 'tiers' ? 'bg-pixel-cyan/20 text-pixel-cyan border-pixel-cyan shadow-[0_0_10px_rgba(56,189,248,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/60 hover:bg-pixel-muted/20'}`}
+              onClick={() => setActiveTab('tiers')}
+              title="Настройка тиров донатов"
+            >
+              ТИРЫ
+            </button>
+            <button 
+              className={`flex-1 py-1 px-1 text-[11px] uppercase font-bold tracking-tight border rounded transition-colors whitespace-nowrap text-center ${activeTab === 'debug' ? 'bg-pixel-danger/20 text-pixel-danger border-pixel-danger shadow-[0_0_10px_rgba(220,38,38,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/60 hover:bg-pixel-muted/20'}`}
+              onClick={() => setActiveTab('debug')}
+              title="Песочница и тесты"
+            >
+              ТЕСТЫ
+            </button>
+            <button 
+              className={`flex-1 py-1 px-1 text-[11px] uppercase font-bold tracking-tight border rounded transition-colors whitespace-nowrap text-center ${activeTab === 'settings' ? 'bg-pixel-light/20 text-pixel-light border-pixel-light shadow-[0_0_10px_rgba(255,255,255,0.2)]' : 'bg-pixel-void border-pixel-muted text-pixel-light/60 hover:bg-pixel-muted/20'}`}
+              onClick={() => setActiveTab('settings')}
+              title="Горячие клавиши и настройки"
+            >
+              ОПЦИИ
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-1 min-h-0 relative">
+            <AnimatePresence mode="wait">
+              {activeTab === 'control' && (
+                <motion.div 
+                  key="control"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col gap-2.5 absolute w-full"
+                >
+                  {/* Stream Mode Banner */}
+                  {streamMode === 'live' ? (
+                    <div className="bg-pixel-danger/10 border border-pixel-danger/40 rounded p-2 text-[10px] text-red-300 flex items-start gap-2 shadow-[0_0_8px_rgba(239,68,68,0.2)]">
+                      <Flame size={14} className="text-pixel-danger flex-shrink-0 mt-0.5 animate-pulse" />
+                      <div>
+                        <div className="font-bold font-heading text-pixel-danger uppercase text-xs">Режим прямого эфира</div>
+                        <div className="text-pixel-light/85 text-xs mt-0.5 leading-snug">
+                          Голосования и эффекты запускаются зрителями в чате Twitch и через донаты.
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-pixel-cyan/10 border border-pixel-cyan/40 rounded p-2 text-[10px] text-cyan-300 flex items-start gap-2 shadow-[0_0_8px_rgba(34,211,238,0.2)]">
+                      <Sparkles size={14} className="text-pixel-cyan flex-shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold font-heading text-pixel-cyan uppercase text-xs">Режим песочницы / Дев-тесты</div>
+                        <div className="text-pixel-light/85 text-xs mt-0.5 leading-snug">
+                          Включена симуляция чата ботами. Тестируйте эффекты без подключения зрителей.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Launch Game Button */}
                   <motion.button
                     whileHover={{ filter: 'brightness(1.2)' }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full bg-pixel-cyan/10 hover:bg-pixel-cyan/20 border border-pixel-cyan/50 text-pixel-cyan text-xs uppercase font-bold py-2 rounded flex items-center justify-center gap-2 shadow-[0_0_5px_rgba(34,211,238,0.3)] transition-colors mt-1"
+                    className="w-full bg-pixel-cyan/10 hover:bg-pixel-cyan/20 border border-pixel-cyan/50 text-pixel-cyan text-xs uppercase font-bold py-2 rounded flex items-center justify-center gap-2 shadow-[0_0_5px_rgba(34,211,238,0.3)] transition-colors"
                     onClick={() => (window as any).api?.launchGame?.()}
                   >
                      🎮 ЗАПУСТИТЬ ИГРУ
                   </motion.button>
 
-                  {/* Start / Stop Buttons */}
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                  <motion.button
-                    whileHover={{ filter: 'brightness(1.2)' }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex flex-col items-center justify-center gap-1 bg-pixel-panel/50 hover:bg-pixel-amber/20 text-pixel-amber border border-pixel-amber/30 p-2 rounded transition-colors"
-                    onClick={() => window.api?.startSimulator?.()}
-                  >
-                    <Play size={16} />
-                    <span className="text-[10px] uppercase font-bold tracking-wider">Start Event</span>
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ filter: 'brightness(1.2)' }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex flex-col items-center justify-center gap-1 bg-pixel-panel/50 hover:bg-pixel-danger/20 text-pixel-danger border border-pixel-danger/30 p-2 rounded transition-colors"
-                    onClick={() => window.api?.stopSimulator?.()}
-                  >
-                    <Square size={16} />
-                    <span className="text-[10px] uppercase font-bold tracking-wider">Stop Event</span>
-                  </motion.button>
-                </div>
+                  {/* Start / Stop Event Buttons */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <motion.button
+                      whileHover={{ filter: 'brightness(1.2)' }}
+                      whileTap={{ scale: 0.98 }}
+                      className="flex flex-col items-center justify-center gap-1 bg-pixel-panel/50 hover:bg-pixel-amber/20 text-pixel-amber border border-pixel-amber/30 p-2 rounded transition-colors"
+                      onClick={() => window.api?.startSimulator?.()}
+                    >
+                      <Play size={16} />
+                      <span className="text-[11px] uppercase font-bold font-heading tracking-wide whitespace-nowrap">Старт события</span>
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ filter: 'brightness(1.2)' }}
+                      whileTap={{ scale: 0.98 }}
+                      className="flex flex-col items-center justify-center gap-1 bg-pixel-panel/50 hover:bg-pixel-danger/20 text-pixel-danger border border-pixel-danger/30 p-2 rounded transition-colors"
+                      onClick={() => window.api?.stopSimulator?.()}
+                    >
+                      <Square size={16} />
+                      <span className="text-[11px] uppercase font-bold font-heading tracking-wide whitespace-nowrap">Остановить</span>
+                    </motion.button>
+                  </div>
 
-                {/* Traitor Button */}
-                <div className="border-t border-pixel-muted/30 pt-3">
-                  <motion.button
-                    whileHover={{ scale: (trustedCount > 0 && !traitorState?.active) ? 1.02 : 1 }}
-                    whileTap={{ scale: (trustedCount > 0 && !traitorState?.active) ? 0.95 : 1 }}
-                    className={`w-full flex items-center justify-center gap-2 text-pixel-light font-bold py-2 px-3 border border-pixel-danger/50 rounded shadow-[0_0_10px_rgba(255,0,0,0.2)] transition-all ${
-                      (trustedCount > 0 && !traitorState?.active)
-                        ? 'bg-pixel-danger/80 hover:bg-pixel-danger' 
-                        : 'bg-pixel-muted/50 opacity-50 cursor-not-allowed'
-                    }`}
-                    onClick={() => window.api?.invokeTraitor?.()}
-                    disabled={trustedCount === 0 || traitorState?.active}
-                  >
-                    <Skull className={trustedCount > 0 && !traitorState?.active ? "animate-pulse text-red-300" : ""} size={16} />
-                    <span className="text-xs uppercase tracking-wide">Invoke Traitor</span>
-                    {trustedCount > 0 && (
-                      <span className="bg-pixel-void text-pixel-light text-[10px] px-1.5 py-0.5 rounded ml-1 shadow-[inset_0_0_5px_rgba(255,0,0,0.5)]">
-                        {trustedCount}
-                      </span>
-                    )}
-                  </motion.button>
-                </div>
-                
-                {/* Pacing */}
-                <div>
-                  <label className="text-[10px] font-bold text-pixel-light/70 uppercase mb-1 flex items-center gap-1">
-                    <Clock size={12} /> Event Pacing (Cooldown)
-                  </label>
-                  <select 
-                    className="w-full bg-pixel-void border border-pixel-muted text-pixel-cyan text-xs p-1 rounded outline-none"
-                    onChange={(e) => window.api?.updateSettings?.({ cooldownMs: parseInt(e.target.value) })}
-                    defaultValue="600000"
-                  >
-                    <option value="60000">1 Minute (TESTING)</option>
-                    <option value="300000">5 Minutes</option>
-                    <option value="600000">10 Minutes (DEFAULT)</option>
-                    <option value="900000">15 Minutes</option>
-                    <option value="1200000">20 Minutes</option>
-                  </select>
-                </div>
-
-              </motion.div>
-            )}
-
-            {activeTab === 'twitch' && (
-              <motion.div 
-                key="twitch"
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2 }}
-                className="flex flex-col gap-3 absolute w-full"
-              >
-                {/* Twitch Connect Box */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Radar className="text-[#6441a5]" size={14} />
-                    <h3 className="text-xs font-bold text-pixel-light/90 uppercase">Twitch Connection</h3>
+                  {/* Traitor Button */}
+                  <div className="border-t border-pixel-muted/30 pt-2">
+                    <motion.button
+                      whileHover={{ scale: (trustedCount > 0 && !traitorState?.active) ? 1.02 : 1 }}
+                      whileTap={{ scale: (trustedCount > 0 && !traitorState?.active) ? 0.95 : 1 }}
+                      className={`w-full flex items-center justify-center gap-2 text-pixel-light font-bold py-2 px-3 border border-pixel-danger/50 rounded shadow-[0_0_10px_rgba(255,0,0,0.2)] transition-all ${
+                        (trustedCount > 0 && !traitorState?.active)
+                          ? 'bg-pixel-danger/80 hover:bg-pixel-danger' 
+                          : 'bg-pixel-muted/50 opacity-50 cursor-not-allowed'
+                      }`}
+                      onClick={() => window.api?.invokeTraitor?.()}
+                      disabled={trustedCount === 0 || traitorState?.active}
+                    >
+                      <Skull className={trustedCount > 0 && !traitorState?.active ? "animate-pulse text-red-300" : ""} size={16} />
+                      <span className="text-xs uppercase font-bold font-heading tracking-wider whitespace-nowrap">ВЫЗВАТЬ ПРЕДАТЕЛЯ</span>
+                      {trustedCount > 0 && (
+                        <span className="bg-pixel-void text-pixel-light text-[10px] px-1.5 py-0.5 rounded ml-1 shadow-[inset_0_0_5px_rgba(255,0,0,0.5)]">
+                          {trustedCount}
+                        </span>
+                      )}
+                    </motion.button>
                   </div>
                   
-                  <div className="flex flex-col gap-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">Channel</label>
-                        <input 
-                          type="text" 
-                          placeholder="lirik" 
-                          className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
-                          value={twitchChannel}
-                          onChange={(e) => setTwitchChannel(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">Bot Username</label>
-                        <input 
-                          type="text" 
-                          className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
-                          value={botUsername}
-                          onChange={(e) => setBotUsername(e.target.value)}
-                          placeholder="my_cool_bot"
-                        />
-                      </div>
+                  {/* Pacing Cooldown */}
+                  <div className="border-t border-pixel-muted/30 pt-2">
+                    <label className="text-xs font-bold font-heading text-pixel-light/90 uppercase mb-1.5 flex items-center gap-1">
+                      <Clock size={12} /> Интервал голосований (Кулдаун)
+                    </label>
+                    <select 
+                      className="w-full bg-pixel-void border border-pixel-muted text-pixel-cyan text-xs p-1.5 rounded outline-none cursor-pointer"
+                      onChange={(e) => window.api?.updateSettings?.({ cooldownMs: parseInt(e.target.value) })}
+                      defaultValue="600000"
+                    >
+                      <option value="60000">1 минута (Тест)</option>
+                      <option value="300000">5 минут</option>
+                      <option value="600000">10 минут (По умолчанию)</option>
+                      <option value="900000">15 минут</option>
+                      <option value="1200000">20 минут</option>
+                    </select>
+                  </div>
+
+                </motion.div>
+              )}
+
+              {activeTab === 'twitch' && (
+                <motion.div 
+                  key="twitch"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col gap-3 absolute w-full"
+                >
+                  {/* Twitch Connect Box */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Radar className="text-[#6441a5]" size={14} />
+                      <h3 className="text-xs font-bold text-pixel-light/90 uppercase">Подключение к Twitch</h3>
                     </div>
                     
-                    <div>
-                      <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">OAuth Token</label>
-                      <input 
-                        type="password" 
-                        className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
-                        value={botToken}
-                        onChange={(e) => setBotToken(e.target.value)}
-                        placeholder="oauth:..."
-                      />
-                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">Канал стримера</label>
+                          <input 
+                            type="text" 
+                            placeholder="например: lirik" 
+                            className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
+                            value={twitchChannel}
+                            onChange={(e) => setTwitchChannel(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">Имя бота</label>
+                          <input 
+                            type="text" 
+                            className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
+                            value={botUsername}
+                            onChange={(e) => setBotUsername(e.target.value)}
+                            placeholder="мой_бот"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">OAuth Токен (Chat Token)</label>
+                        <input 
+                          type="password" 
+                          className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
+                          value={botToken}
+                          onChange={(e) => setBotToken(e.target.value)}
+                          placeholder="oauth:xxxxxxxxxxxxxxxxxxxx"
+                        />
+                      </div>
 
-                    {/* Status Indicator */}
-                    <div className="flex items-center gap-2 mt-1 bg-pixel-void/50 border border-pixel-muted/30 p-1.5 rounded">
-                      {twitchStatus?.connected ? (
-                        <>
-                          {twitchStatus?.botAuthenticated ? (
-                            <CheckCircle2 size={12} className="text-green-400" />
-                          ) : (
-                            <Loader2 size={12} className="text-yellow-400 animate-spin" />
-                          )}
-                          <span className={`text-[10px] font-mono font-bold ${twitchStatus?.botAuthenticated ? 'text-green-400 animate-pulse' : 'text-yellow-400'}`}>
-                            {twitchStatus?.botAuthenticated ? 'BOT AUTHENTICATED' : 'CONNECTED (READ-ONLY)'}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          {tokenStatus === 'validating' && <Loader2 size={12} className="text-yellow-400 animate-spin" />}
-                          {tokenStatus === 'valid' && <CheckCircle2 size={12} className="text-green-400" />}
-                          {tokenStatus === 'invalid' && <XCircle size={12} className="text-red-400" />}
-                          {tokenStatus === 'idle' && <Radio size={12} className="text-pixel-light/70" />}
-                          
-                          <span className={`text-[10px] font-mono font-bold ${
-                            tokenStatus === 'validating' ? 'text-yellow-400' :
-                            tokenStatus === 'valid' ? 'text-green-400 animate-pulse' :
-                            tokenStatus === 'invalid' ? 'text-red-400' :
-                            'text-pixel-light/70'
-                          }`}>
-                            {tokenStatus === 'validating' && 'VALIDATING TOKEN...'}
-                            {tokenStatus === 'valid' && 'READY (BOT AUTHENTICATED)'}
-                            {tokenStatus === 'invalid' && 'INVALID TOKEN'}
-                            {tokenStatus === 'idle' && 'READY (READ-ONLY)'}
-                          </span>
-                        </>
-                      )}
-                    </div>
+                      {/* Status Indicator */}
+                      <div className="flex items-center gap-2 mt-1 bg-pixel-void/50 border border-pixel-muted/30 p-1.5 rounded">
+                        {twitchStatus?.connected ? (
+                          <>
+                            {twitchStatus?.botAuthenticated ? (
+                              <CheckCircle2 size={12} className="text-green-400" />
+                            ) : (
+                              <Loader2 size={12} className="text-yellow-400 animate-spin" />
+                            )}
+                            <span className={`text-[10px] font-mono font-bold ${twitchStatus?.botAuthenticated ? 'text-green-400 animate-pulse' : 'text-yellow-400'}`}>
+                              {twitchStatus?.botAuthenticated ? 'БОТ АВТОРИЗОВАН (ОТПРАВКА И ЧТЕНИЕ)' : 'ПОДКЛЮЧЕНО (ТОЛЬКО ЧТЕНИЕ)'}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            {tokenStatus === 'validating' && <Loader2 size={12} className="text-yellow-400 animate-spin" />}
+                            {tokenStatus === 'valid' && <CheckCircle2 size={12} className="text-green-400" />}
+                            {tokenStatus === 'invalid' && <XCircle size={12} className="text-red-400" />}
+                            {tokenStatus === 'idle' && <Radio size={12} className="text-pixel-light/70" />}
+                            
+                            <span className={`text-[10px] font-mono font-bold ${
+                              tokenStatus === 'validating' ? 'text-yellow-400' :
+                              tokenStatus === 'valid' ? 'text-green-400 animate-pulse' :
+                              tokenStatus === 'invalid' ? 'text-red-400' :
+                              'text-pixel-light/70'
+                            }`}>
+                              {tokenStatus === 'validating' && 'ПРОВЕРКА ТОКЕНА...'}
+                              {tokenStatus === 'valid' && 'ГОТОВ (БОТ ВАЛИДЕН)'}
+                              {tokenStatus === 'invalid' && 'НЕВЕРНЫЙ ТОКЕН'}
+                              {tokenStatus === 'idle' && 'ГОТОВ К ПОДКЛЮЧЕНИЮ'}
+                            </span>
+                          </>
+                        )}
+                      </div>
 
-                    <div className="mt-2">
-                      {!twitchStatus?.connected ? (
-                        <motion.button
-                          whileHover={{ scale: 1.02, boxShadow: '0 0 15px rgba(145,70,255,0.8)' }}
-                          whileTap={{ scale: 0.98 }}
-                          className="w-full flex items-center justify-center gap-2 bg-[#6441a5] text-pixel-light font-bold py-1.5 px-3 border border-pixel-light/50 rounded text-xs shadow-[0_0_5px_rgba(145,70,255,0.5)]"
-                          onClick={() => {
-                            if (window.api?.saveTwitchAuth) {
-                              window.api.saveTwitchAuth(botUsername, botToken, twitchChannel);
-                            }
-                            window.api?.connectTwitch?.(twitchChannel);
-                          }}
-                        >
-                          Connect
-                        </motion.button>
-                      ) : (
-                        <motion.button
-                          whileHover={{ scale: 1.02, boxShadow: '0 0 10px rgba(156,163,175,0.6)' }}
-                          whileTap={{ scale: 0.98 }}
-                          className="w-full flex items-center justify-center gap-2 bg-pixel-muted/50 text-pixel-light font-bold py-1.5 px-3 border border-pixel-light/50 rounded text-xs"
-                          onClick={() => window.api?.disconnectTwitch?.()}
-                        >
-                          Disconnect
-                        </motion.button>
-                      )}
+                      <div className="mt-2">
+                        {!twitchStatus?.connected ? (
+                          <motion.button
+                            whileHover={{ scale: 1.02, boxShadow: '0 0 15px rgba(145,70,255,0.8)' }}
+                            whileTap={{ scale: 0.98 }}
+                            className="w-full flex items-center justify-center gap-2 bg-[#6441a5] text-pixel-light font-bold py-1.5 px-3 border border-pixel-light/50 rounded text-xs shadow-[0_0_5px_rgba(145,70,255,0.5)]"
+                            onClick={() => {
+                              if (window.api?.saveTwitchAuth) {
+                                window.api.saveTwitchAuth(botUsername, botToken, twitchChannel);
+                              }
+                              window.api?.connectTwitch?.(twitchChannel);
+                            }}
+                          >
+                            ПОДКЛЮЧИТЬ TWITCH
+                          </motion.button>
+                        ) : (
+                          <motion.button
+                            whileHover={{ scale: 1.02, boxShadow: '0 0 10px rgba(156,163,175,0.6)' }}
+                            whileTap={{ scale: 0.98 }}
+                            className="w-full flex items-center justify-center gap-2 bg-pixel-muted/50 text-pixel-light font-bold py-1.5 px-3 border border-pixel-light/50 rounded text-xs"
+                            onClick={() => window.api?.disconnectTwitch?.()}
+                          >
+                            ОТКЛЮЧИТЬ
+                          </motion.button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </motion.div>
-            )}
+                </motion.div>
+              )}
 
-            {activeTab === 'debug' && (
-              <motion.div 
-                key="debug"
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2 }}
-                className="flex flex-col gap-3 absolute w-full"
-              >
-                {/* VOICE TESTER */}
-                <button
-                  onClick={() => setShowTester(true)}
-                  className="w-full bg-[#2d1b4e] hover:bg-[#432c7a] border border-[#a855f7] text-[#e9d5ff] font-bold p-2 rounded text-xs tracking-widest shadow-[0_0_10px_rgba(168,85,247,0.3)] transition-all flex items-center justify-center gap-2"
+              {activeTab === 'debug' && (
+                <motion.div 
+                  key="debug"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col gap-2.5 absolute w-full"
                 >
-                  <Volume2 size={16} /> МЕНЮ ТЕСТА ГОЛОСОВ (SOUNDBOARD)
-                </button>
+                  {/* VOICE TESTER MODAL TRIGGER */}
+                  <button
+                    onClick={() => setShowTester(true)}
+                    className="w-full bg-[#2d1b4e] hover:bg-[#432c7a] border border-[#a855f7] text-[#e9d5ff] font-bold p-2 rounded text-xs tracking-wider shadow-[0_0_10px_rgba(168,85,247,0.3)] transition-all flex items-center justify-center gap-2"
+                  >
+                    <Volume2 size={16} className="flex-shrink-0" /> <span className="whitespace-nowrap">САУНДБОРД И ТЕСТ ОЗВУЧКИ</span>
+                  </button>
 
-                {/* Donate Simulation */}
-                <div className="border-t border-pixel-muted/30 pt-3 flex gap-2">
+                  {/* Donate Simulation */}
+                  <div className="border-t border-pixel-muted/30 pt-2">
+                    <label className="text-[10px] font-bold text-pixel-light/70 uppercase mb-1.5 block">
+                      Эмуляция донатов зрителей:
+                    </label>
+                    <div className="flex gap-2">
+                      <motion.button
+                        whileHover={{ filter: 'brightness(1.2)' }}
+                        whileTap={{ scale: 0.98 }}
+                        className="flex-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/50 text-green-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(34,197,94,0.3)] transition-colors"
+                        onClick={() => (window as any).api?.simulateDonation?.(100)}
+                        title="Обычный донат: добавляет голоса или запускает раунд"
+                      >
+                         💎 100₽
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ filter: 'brightness(1.2)' }}
+                        whileTap={{ scale: 0.98 }}
+                        className="flex-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 text-red-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(239,68,68,0.3)] transition-colors"
+                        onClick={() => (window as any).api?.simulateDonation?.(300)}
+                        title="VIP донат: мгновенное прерывание"
+                      >
+                         🚨 300₽
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ filter: 'brightness(1.2)' }}
+                        whileTap={{ scale: 0.98 }}
+                        className="flex-1 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(234,179,8,0.3)] transition-colors"
+                        onClick={() => (window as any).api?.simulateDonation?.(500)}
+                        title="Мега донат: активирует комбо"
+                      >
+                         👑 500₽
+                      </motion.button>
+                    </div>
+                  </div>
+
+                  {/* Umbrella Intervention Trigger */}
                   <motion.button
                     whileHover={{ filter: 'brightness(1.2)' }}
                     whileTap={{ scale: 0.98 }}
-                    className="flex-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/50 text-green-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(34,197,94,0.3)] transition-colors"
-                    onClick={() => (window as any).api?.simulateDonation?.(100)}
+                    className="w-full bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/50 text-orange-400 text-xs uppercase font-bold py-2 rounded flex items-center justify-center gap-2 shadow-[0_0_5px_rgba(249,115,22,0.3)] transition-colors whitespace-nowrap"
+                    onClick={() => (window as any).api?.simulatorCombo?.()}
                   >
-                     💎 100₽
+                     🚨 ВМЕШАТЕЛЬСТВО АМБРЕЛЛЫ
                   </motion.button>
-                  <motion.button
-                    whileHover={{ filter: 'brightness(1.2)' }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 text-red-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(239,68,68,0.3)] transition-colors"
-                    onClick={() => (window as any).api?.simulateDonation?.(300)}
-                  >
-                     🚨 300₽
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ filter: 'brightness(1.2)' }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex-1 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 text-[10px] uppercase font-bold py-1.5 rounded flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(234,179,8,0.3)] transition-colors"
-                    onClick={() => (window as any).api?.simulateDonation?.(500)}
-                  >
-                     👑 500₽
-                  </motion.button>
-                </div>
 
-                <motion.button
-                  whileHover={{ filter: 'brightness(1.2)' }}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/50 text-orange-400 text-xs uppercase font-bold py-2 rounded flex items-center justify-center gap-2 shadow-[0_0_5px_rgba(249,115,22,0.3)] transition-colors"
-                  onClick={() => (window as any).api?.simulatorCombo?.()}
-                >
-                   🚨 ВМЕШАТЕЛЬСТВО АМБРЕЛЛЫ
-                </motion.button>
-
-
-              </motion.div>
-            )}
-
-            {activeTab === 'settings' && (
-              <motion.div 
-                key="settings"
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2 }}
-                className="flex flex-col gap-3 absolute w-full"
-              >
-                <div>
-                  <h3 className="text-xs font-bold text-pixel-light/90 uppercase mb-2">Global Hotkeys</h3>
-                  <div className="flex flex-col gap-2">
-                    <div>
-                      <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">Traitor Mode Hotkey</label>
-                      <input 
-                        type="text" 
-                        className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
-                        value={hotkeys.traitor}
-                        onChange={(e) => setHotkeys({ ...hotkeys, traitor: e.target.value })}
-                        placeholder="e.g. num1, F1"
-                      />
+                  {/* Test Cycle Controls */}
+                  <div className="border-t border-pixel-muted/30 pt-2 flex flex-col gap-2">
+                    <label className="text-[10px] font-bold text-pixel-light/70 uppercase block">
+                      Управление циклом голосования (Тест):
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <motion.button
+                        whileHover={{ filter: 'brightness(1.2)' }}
+                        whileTap={{ scale: 0.98 }}
+                        className="flex items-center justify-center gap-1.5 bg-pixel-panel/50 hover:bg-pixel-amber/20 text-pixel-amber border border-pixel-amber/30 py-2 px-2 rounded transition-colors text-xs font-bold uppercase"
+                        onClick={() => window.api?.startSimulator?.()}
+                      >
+                        <Play size={14} />
+                        <span>СТАРТ РАУНДА</span>
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ filter: 'brightness(1.2)' }}
+                        whileTap={{ scale: 0.98 }}
+                        className="flex items-center justify-center gap-1.5 bg-pixel-panel/50 hover:bg-pixel-danger/20 text-pixel-danger border border-pixel-danger/30 py-2 px-2 rounded transition-colors text-xs font-bold uppercase"
+                        onClick={() => window.api?.stopSimulator?.()}
+                      >
+                        <Square size={14} />
+                        <span>СТОП</span>
+                      </motion.button>
                     </div>
-                    <div>
-                      <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">Umbrella Intervention Hotkey</label>
-                      <input 
-                        type="text" 
-                        className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
-                        value={hotkeys.intervention}
-                        onChange={(e) => setHotkeys({ ...hotkeys, intervention: e.target.value })}
-                        placeholder="e.g. num2, F2"
-                      />
-                    </div>
-                    <div className="text-[9px] text-pixel-light/50 mt-1">
-                      Valid keys: num0-num9, numdec, F1-F24, CommandOrControl+Shift+T, etc.
-                    </div>
+
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      className="w-full bg-pixel-cyan/10 hover:bg-pixel-cyan/20 border border-pixel-cyan/50 text-pixel-cyan text-xs uppercase font-bold py-1.5 rounded mt-2 shadow-[0_0_5px_rgba(34,211,238,0.3)] transition-colors"
-                      onClick={() => window.api?.saveHotkeys?.(hotkeys)}
+                      className="w-full flex items-center justify-center gap-2 bg-pixel-danger/20 hover:bg-pixel-danger/30 border border-pixel-danger/40 text-red-300 py-2 px-2 rounded transition-colors text-xs font-bold uppercase mt-1"
+                      onClick={() => window.api?.invokeTraitor?.()}
                     >
-                      Save Settings
+                      <Skull size={15} />
+                      <span>ТЕСТ: РЕЖИМ ПРЕДАТЕЛЯ</span>
                     </motion.button>
+                  </div>
+
+                </motion.div>
+              )}
+
+              {activeTab === 'settings' && (
+                <motion.div 
+                  key="settings"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col gap-3 absolute w-full"
+                >
+                  <div>
+                    <h3 className="text-xs font-bold text-pixel-light/90 uppercase mb-2">Глобальные горячие клавиши</h3>
+                    <div className="flex flex-col gap-2">
+                      <div>
+                        <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">Клавиша: Режим Предателя</label>
+                        <input 
+                          type="text" 
+                          className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
+                          value={hotkeys.traitor}
+                          onChange={(e) => setHotkeys({ ...hotkeys, traitor: e.target.value })}
+                          placeholder="например: num1, F1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-pixel-light/70 text-[10px] font-bold uppercase mb-0.5">Клавиша: Вмешательство Амбреллы</label>
+                        <input 
+                          type="text" 
+                          className="w-full bg-pixel-void/50 border-b border-pixel-muted text-pixel-cyan px-2 py-1 font-mono text-xs outline-none focus:border-pixel-cyan focus:bg-pixel-void transition-colors"
+                          value={hotkeys.intervention}
+                          onChange={(e) => setHotkeys({ ...hotkeys, intervention: e.target.value })}
+                          placeholder="например: num2, F2"
+                        />
+                      </div>
+                      <div className="text-[9px] text-pixel-light/50 mt-0.5">
+                        Поддерживаемые клавиши: num0-num9, numdec, F1-F24, Control+Shift+T и т.д.
+                      </div>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="w-full bg-pixel-cyan/10 hover:bg-pixel-cyan/20 border border-pixel-cyan/50 text-pixel-cyan text-xs uppercase font-bold py-1.5 rounded mt-2 shadow-[0_0_5px_rgba(34,211,238,0.3)] transition-colors whitespace-nowrap"
+                        onClick={() => window.api?.saveHotkeys?.(hotkeys)}
+                      >
+                        СОХРАНИТЬ НАСТРОЙКИ
+                      </motion.button>
+                    </div>
+                  </div>
+
+                  {/* System Settings */}
+                  <div className="border-t border-pixel-muted/30 pt-2 mt-1">
+                    <h3 className="text-xs font-bold text-pixel-light/90 uppercase mb-2 text-pixel-danger">Опасная зона</h3>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="w-full bg-pixel-danger/10 hover:bg-pixel-danger border border-pixel-danger/50 hover:border-pixel-danger text-pixel-danger hover:text-pixel-void text-xs uppercase font-bold py-1.5 rounded transition-colors whitespace-nowrap"
+                      onClick={() => onReinstall && onReinstall()}
+                    >
+                      ⚙️ ПЕРЕУСТАНОВИТЬ МОСТ
+                    </motion.button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: Voting / Traitor UI + Karma + Logs */}
+        <div className="col-span-7 h-full flex flex-col gap-2.5 overflow-hidden relative">
+          
+          {/* Voting or Cooldown UI */}
+          <div className="flex flex-col min-h-0 max-h-[48%]">
+            {renderVotingUI()}
+          </div>
+
+          {/* Bottom Area: Top Karma & System Logs (on 'control') OR Mobile Remote & Quick Triggers (on 'debug') */}
+          {activeTab === 'debug' ? (
+            <div className="flex gap-2.5 flex-1 min-h-0">
+              {/* Left Box: Mobile Remote (Stream Deck) QR & Link */}
+              <div className="w-[44%] bg-gradient-to-b from-pixel-void to-pixel-void/80 border border-cyan-500/40 p-2.5 rounded text-xs shadow-[inset_0_0_10px_rgba(0,0,0,0.8)] relative flex flex-col justify-between overflow-hidden">
+                <div>
+                  <div className="flex items-center justify-between border-b border-cyan-500/30 pb-1.5 mb-2">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-400 uppercase font-heading">
+                      <Smartphone size={14} />
+                      <span>МОБИЛЬНЫЙ ПУЛЬТ</span>
+                    </div>
+                    {remoteInfo && (
+                      <span className="text-[10px] font-mono text-cyan-300 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                        {remoteInfo.clients > 0 ? `🟢 ${remoteInfo.clients} В СЕТИ` : '⚪ ОЖИДАНИЕ'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2.5 items-center">
+                    {remoteInfo?.qr ? (
+                      <div className="bg-white p-1 rounded shadow-md flex-shrink-0">
+                        <img 
+                          src={remoteInfo.qr} 
+                          alt="QR Код" 
+                          className="w-[84px] h-[84px] block" 
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-[84px] h-[84px] bg-pixel-panel/50 border border-pixel-muted/30 rounded flex items-center justify-center flex-shrink-0">
+                        <QrCode size={26} className="text-pixel-muted/50 animate-pulse" />
+                      </div>
+                    )}
+
+                    <div className="flex-1 flex flex-col gap-1 text-[10px] text-pixel-light/75 leading-tight">
+                      <div>
+                        Наведи камеру телефона на QR-код (нужен один Wi-Fi).
+                      </div>
+                      <div className="text-cyan-400 font-mono text-[9px] mt-0.5">
+                        Управляй эффектами прямо со смартфона без паузы игры!
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* System Settings */}
-                <div className="border-t border-pixel-muted/30 pt-3 mt-1">
-                  <h3 className="text-xs font-bold text-pixel-light/90 uppercase mb-2 text-pixel-danger">Danger Zone</h3>
+                <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-pixel-muted/20">
+                  <input 
+                    readOnly 
+                    value={remoteInfo?.url || 'http://127.0.0.1:27016/remote'} 
+                    className="bg-pixel-panel/60 border border-pixel-muted/50 text-[10px] text-cyan-300 px-1.5 py-1 rounded font-mono flex-1 truncate select-all"
+                  />
+                  <button
+                    onClick={() => {
+                      if (remoteInfo?.url) {
+                        navigator.clipboard.writeText(remoteInfo.url)
+                        setCopiedRemote(true)
+                        setTimeout(() => setCopiedRemote(false), 2000)
+                      }
+                    }}
+                    className="bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-300 p-1.5 rounded transition-colors"
+                    title="Скопировать ссылку"
+                  >
+                    {copiedRemote ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (remoteInfo?.url) {
+                        window.open(remoteInfo.url, '_blank')
+                      }
+                    }}
+                    className="bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-300 p-1.5 rounded transition-colors"
+                    title="Открыть в браузере ПК"
+                  >
+                    <ExternalLink size={12} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Box: Quick Effect Triggers (No voting required) */}
+              <div className="w-[56%] bg-gradient-to-b from-pixel-void to-pixel-void/80 border border-pixel-muted/50 p-2.5 rounded text-xs font-mono shadow-[inset_0_0_10px_rgba(0,0,0,0.8)] relative flex flex-col justify-between overflow-hidden">
+                <div className="flex items-center justify-between border-b border-pixel-border/30 pb-1.5 mb-2">
+                  <h3 className="text-pixel-light/90 font-bold font-heading text-xs uppercase tracking-wider flex items-center gap-1.5">
+                    <Zap size={14} className="text-pixel-amber" />
+                    <span>БЫСТРЫЙ ТЕСТ В ИГРЕ</span>
+                  </h3>
+                  <span className="text-[9px] text-pixel-light/40 uppercase">Без ожидания голосования</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 flex-1">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full bg-pixel-danger/10 hover:bg-pixel-danger border border-pixel-danger/50 hover:border-pixel-danger text-pixel-danger hover:text-pixel-void text-xs uppercase font-bold py-1.5 rounded transition-colors"
-                    onClick={() => onReinstall && onReinstall()}
+                    className="bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-300 text-[10px] font-bold py-2 px-2 rounded flex items-center justify-between transition-colors shadow-sm"
+                    onClick={async () => {
+                      await window.api?.triggerEffect?.('empty_mag')
+                      setTestSuccessEffect('empty_mag')
+                      setTimeout(() => setTestSuccessEffect(null), 1500)
+                    }}
                   >
-                    ⚙️ Reinstall Game Bridge
+                    <span className="truncate">🔫 ОСЕЧКА (0 ПАТРОН)</span>
+                    {testSuccessEffect === 'empty_mag' ? <Check size={13} className="text-green-400 flex-shrink-0" /> : <Zap size={12} className="text-red-400 flex-shrink-0" />}
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-purple-300 text-[10px] font-bold py-2 px-2 rounded flex items-center justify-between transition-colors shadow-sm"
+                    onClick={async () => {
+                      await window.api?.triggerEffect?.('hop')
+                      setTestSuccessEffect('hop')
+                      setTimeout(() => setTestSuccessEffect(null), 1500)
+                    }}
+                  >
+                    <span className="truncate">🦘 ПОДСКОК</span>
+                    {testSuccessEffect === 'hop' ? <Check size={13} className="text-green-400 flex-shrink-0" /> : <Zap size={12} className="text-purple-400 flex-shrink-0" />}
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="bg-yellow-500/15 hover:bg-yellow-500/25 border border-yellow-500/40 text-yellow-300 text-[10px] font-bold py-2 px-2 rounded flex items-center justify-between transition-colors shadow-sm"
+                    onClick={async () => {
+                      await window.api?.triggerEffect?.('push_back')
+                      setTestSuccessEffect('push_back')
+                      setTimeout(() => setTestSuccessEffect(null), 1500)
+                    }}
+                  >
+                    <span className="truncate">💨 ВЕТЕРОК (НАЗАД)</span>
+                    {testSuccessEffect === 'push_back' ? <Check size={13} className="text-green-400 flex-shrink-0" /> : <Zap size={12} className="text-yellow-400 flex-shrink-0" />}
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="bg-green-500/15 hover:bg-green-500/25 border border-green-500/40 text-green-300 text-[10px] font-bold py-2 px-2 rounded flex items-center justify-between transition-colors shadow-sm"
+                    onClick={async () => {
+                      await window.api?.triggerEffect?.('heal_small')
+                      setTestSuccessEffect('heal_small')
+                      setTimeout(() => setTestSuccessEffect(null), 1500)
+                    }}
+                  >
+                    <span className="truncate">💚 ХИЛ (+25%)</span>
+                    {testSuccessEffect === 'heal_small' ? <Check size={13} className="text-green-400 flex-shrink-0" /> : <Zap size={12} className="text-green-400 flex-shrink-0" />}
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold py-2 px-2 rounded flex items-center justify-between transition-colors shadow-sm"
+                    onClick={async () => {
+                      await window.api?.triggerEffect?.('speed_up')
+                      setTestSuccessEffect('speed_up')
+                      setTimeout(() => setTestSuccessEffect(null), 1500)
+                    }}
+                  >
+                    <span className="truncate">⚡ АДРЕНАЛИН (СПРИНТ)</span>
+                    {testSuccessEffect === 'speed_up' ? <Check size={13} className="text-green-400 flex-shrink-0" /> : <Zap size={12} className="text-cyan-400 flex-shrink-0" />}
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-[10px] font-bold py-2 px-2 rounded flex items-center justify-between transition-colors shadow-sm"
+                    onClick={async () => {
+                      await window.api?.triggerEffect?.('papercut')
+                      setTestSuccessEffect('papercut')
+                      setTimeout(() => setTestSuccessEffect(null), 1500)
+                    }}
+                  >
+                    <span className="truncate">🩸 ЦАРАПИНА (-10% HP)</span>
+                    {testSuccessEffect === 'papercut' ? <Check size={13} className="text-green-400 flex-shrink-0" /> : <Zap size={12} className="text-rose-400 flex-shrink-0" />}
                   </motion.button>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-
-      {/* Right Column (Data/State) */}
-      <div className="col-span-7 h-full flex flex-col gap-3 overflow-hidden relative z-10">
-        {/* Voting UI at the top */}
-        <div className="flex flex-col min-h-0 max-h-[50%]">
-          {renderVotingUI()}
-        </div>
-
-        {/* Top Karma & Logs at the bottom */}
-        <div className="flex gap-3 flex-1 min-h-0">
-          <div className="w-1/3 bg-gradient-to-b from-pixel-void to-pixel-void/80 border border-pixel-muted/50 p-2 rounded text-xs text-pixel-cyan font-mono shadow-[inset_0_0_10px_rgba(0,0,0,0.8)] relative flex flex-col overflow-hidden after:content-[''] after:absolute after:inset-0 after:bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABZJREFUeNpi2r9//38bIxsDBBgAEGAAZTwF85bZzQ8AAAAASUVORK5CYII=')] after:opacity-10 after:pointer-events-none">
-            <h3 className="text-pixel-amber font-bold mb-2 border-b border-pixel-amber/30 pb-1 text-center text-[10px] uppercase relative z-10">Top Karma</h3>
-            <div className="overflow-y-auto flex-1 custom-scrollbar min-h-0 pr-1 relative z-10">
-              {(!leaderboard || leaderboard.length === 0) ? (
-                <div className="text-pixel-muted/50 text-center text-[10px] mt-2">No data...</div>
-              ) : (
-                leaderboard.map((viewer, idx) => (
-                  <div key={viewer?.username || idx} className="flex justify-between items-center mb-1.5">
-                    <span className="text-pixel-light/80 truncate pr-1 text-[10px]">{idx + 1}. {viewer?.username}</span>
-                    <span className="text-pixel-cyan font-bold bg-pixel-panel/50 px-1 border border-pixel-muted/30 text-[10px] rounded-sm">{viewer?.karma}</span>
-                  </div>
-                ))
-              )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex gap-2.5 flex-1 min-h-0">
+              {/* Top Karma */}
+              <div className="w-1/3 bg-gradient-to-b from-pixel-void to-pixel-void/80 border border-pixel-muted/50 p-2 rounded text-xs text-pixel-cyan font-mono shadow-[inset_0_0_10px_rgba(0,0,0,0.8)] relative flex flex-col overflow-hidden">
+                <h3 className="text-pixel-amber font-bold font-heading mb-1.5 border-b border-pixel-amber/30 pb-1 text-center text-xs uppercase tracking-wider relative z-10">
+                  Топ кармы
+                </h3>
+                <div className="overflow-y-auto flex-1 custom-scrollbar min-h-0 pr-1 relative z-10">
+                  {(!leaderboard || leaderboard.length === 0) ? (
+                    <div className="text-pixel-muted/50 text-center text-[10px] mt-2">Нет данных...</div>
+                  ) : (
+                    leaderboard.map((viewer, idx) => (
+                      <div key={viewer?.username || idx} className="flex justify-between items-center mb-1">
+                        <span className="text-pixel-light/80 truncate pr-1 text-[10px]">{idx + 1}. {viewer?.username}</span>
+                        <span className="text-pixel-cyan font-bold bg-pixel-panel/50 px-1 border border-pixel-muted/30 text-[10px] rounded-sm">{viewer?.karma}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
 
-          <div className="w-2/3 bg-gradient-to-b from-pixel-void to-pixel-void/80 border border-pixel-muted/50 p-2 rounded text-xs text-pixel-cyan font-mono shadow-[inset_0_0_10px_rgba(0,0,0,0.8)] relative flex flex-col min-h-0 overflow-hidden after:content-[''] after:absolute after:inset-0 after:bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABZJREFUeNpi2r9//38bIxsDBBgAEGAAZTwF85bZzQ8AAAAASUVORK5CYII=')] after:opacity-10 after:pointer-events-none">
-            <h3 className="text-pixel-light/50 font-bold mb-1 border-b border-pixel-border/30 pb-1 text-[10px] uppercase relative z-10">System Logs</h3>
-            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 pr-1 text-[10px] relative z-10">
-              {(logs || []).map((log, index) => (
-                <div key={index} className="mb-1.5 break-all border-b border-pixel-border/20 pb-1 flex flex-col gap-0.5">
-                  <div className="text-[9px] text-pixel-light/30">{log.timestamp}</div>
-                  <div className="flex items-start">
-                    {log?.type === 'system' ? (
-                      <span className="text-pixel-danger font-bold opacity-100">{log?.message}</span>
-                    ) : (
-                      <>
-                        <span className="text-pixel-amber mr-1">{'>'}</span>
-                        <span className="opacity-70 text-pixel-light/60">{log?.username}: </span>
-                        <span className="opacity-90 ml-1 text-pixel-cyan font-bold">{log?.command}</span>
-                      </>
-                    )}
+              {/* System Logs with Filters & Clear */}
+              <div className="w-2/3 bg-gradient-to-b from-pixel-void to-pixel-void/80 border border-pixel-muted/50 p-2 rounded text-xs text-pixel-cyan font-mono shadow-[inset_0_0_10px_rgba(0,0,0,0.8)] relative flex flex-col min-h-0 overflow-hidden">
+                <div className="flex items-center justify-between border-b border-pixel-border/30 pb-1 mb-1 relative z-10">
+                  <h3 className="text-pixel-light/80 font-bold font-heading text-xs uppercase tracking-wider">
+                    Журнал
+                  </h3>
+                  
+                  {/* Log Filters */}
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={() => setLogFilter('all')}
+                      className={`px-1.5 py-0.5 text-[9px] rounded font-bold uppercase transition-colors ${logFilter === 'all' ? 'bg-pixel-cyan text-pixel-void' : 'text-pixel-light/50 hover:text-pixel-light'}`}
+                    >
+                      Все
+                    </button>
+                    <button 
+                      onClick={() => setLogFilter('system')}
+                      className={`px-1.5 py-0.5 text-[9px] rounded font-bold uppercase transition-colors ${logFilter === 'system' ? 'bg-pixel-cyan text-pixel-void' : 'text-pixel-light/50 hover:text-pixel-light'}`}
+                    >
+                      События
+                    </button>
+                    <button 
+                      onClick={() => setLogFilter('chat')}
+                      className={`px-1.5 py-0.5 text-[9px] rounded font-bold uppercase transition-colors ${logFilter === 'chat' ? 'bg-pixel-cyan text-pixel-void' : 'text-pixel-light/50 hover:text-pixel-light'}`}
+                    >
+                      Чат
+                    </button>
+                    <button 
+                      onClick={() => setLogs([])}
+                      className="ml-1 text-pixel-light/40 hover:text-pixel-danger p-0.5 transition-colors"
+                      title="Очистить журнал"
+                    >
+                      <Trash2 size={11} />
+                    </button>
                   </div>
                 </div>
-              ))}
-              <div ref={logsEndRef} />
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 pr-1 text-xs font-mono relative z-10">
+                  {(filteredLogs || []).map((log, index) => (
+                    <div key={index} className="mb-1.5 break-all border-b border-pixel-border/20 pb-0.5 flex flex-col gap-0.5">
+                      <div className="text-[10px] text-pixel-light/50 font-mono">{log.timestamp}</div>
+                      <div className="flex items-start">
+                        {log?.type === 'system' ? (
+                          <span className="text-pixel-danger font-bold opacity-100">{log?.message}</span>
+                        ) : (
+                          <>
+                            <span className="text-pixel-amber mr-1">{'>'}</span>
+                            <span className="opacity-70 text-pixel-light/60">{log?.username}: </span>
+                            <span className="opacity-90 ml-1 text-pixel-cyan font-bold">{log?.command}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={logsEndRef} />
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
+
       <AnimatePresence>
         {activeTab === 'tiers' && <TiersConfigurator onClose={() => setActiveTab('control')} />}
         {showTester && <VoiceTester onClose={() => setShowTester(false)} />}
       </AnimatePresence>
     </div>
   )
-
-
-
 }
+

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { X, Minus, Settings } from 'lucide-react'
+import { X, Minus } from 'lucide-react'
 import { SimulatorPanel } from './components/SimulatorPanel'
 import { SetupWizard } from './components/SetupWizard'
 
@@ -99,10 +99,10 @@ function App() {
           <div className="absolute bottom-[38px] left-[70px] right-[70px] flex justify-between items-center text-[11px] sm:text-xs text-pixel-light/80 tracking-widest pointer-events-none z-50">
             <div className="flex items-center gap-2 drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">
               <span className="rec-dot w-2 h-2 rounded-full bg-pixel-danger animate-ping shadow-[0_0_8px_var(--rc-red)]"></span>
-              STATUS: <b className="text-pixel-amber ml-1 drop-shadow-[0_0_6px_rgba(255,205,117,0.5)]">LINK ESTABLISHED</b>
+              STATUS: <b className="text-pixel-amber ml-1 drop-shadow-[0_0_6px_rgba(255,205,117,0.5)] font-heading tracking-wider">LINK ESTABLISHED</b>
             </div>
             <div className="flex items-center gap-2 drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">
-              TARGET: <b className="text-pixel-cyan ml-1 drop-shadow-[0_0_6px_rgba(65,166,246,0.5)]">RESIDENT EVIL 2</b>
+              TARGET: <b className="text-pixel-cyan ml-1 drop-shadow-[0_0_6px_rgba(65,166,246,0.5)] font-heading tracking-wider">RESIDENT EVIL 2</b>
             </div>
           </div>
             

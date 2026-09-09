@@ -67,7 +67,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
 
   const handleInstall = async () => {
     setStep(3);
-    setInstallProgress({ percent: 0, message: 'Starting installation...' });
+    setInstallProgress({ percent: 0, message: 'Начало установки...' });
     if (gamePath && selectedVariant) {
       await (window as any).api?.install?.(gamePath, selectedVariant.archiveName);
       await (window as any).api?.saveStoredGamePath?.(gamePath);
@@ -78,7 +78,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
   const handleUpdateScripts = async () => {
     if (gamePath) {
       setIsUpdating(true);
-      setInstallProgress({ percent: 0, message: 'Updating scripts...' });
+      setInstallProgress({ percent: 0, message: 'Обновление скриптов...' });
       await (window as any).api?.updateScripts?.(gamePath);
       setIsUpdating(false);
     }
@@ -94,7 +94,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
 
       <div className="relative z-10 w-full max-w-md bg-pixel-void border-2 border-pixel-muted p-6 rounded shadow-pixel">
         <h2 className="text-xl font-bold text-pixel-light mb-4 text-center border-b-2 border-pixel-muted pb-2">
-          Setup Wizard - Step {step}/4
+          Мастер установки — Шаг {step}/4
         </h2>
         
         <div className="relative min-h-[250px]">
@@ -110,7 +110,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
               {step === 1 && (
                 <div className="flex flex-col gap-4">
                   <div>
-                    <label className="block text-pixel-cyan mb-2 text-sm uppercase">Select Game:</label>
+                    <label className="block text-pixel-cyan mb-2 text-sm uppercase">Выберите игру:</label>
                     <select 
                       className="w-full bg-pixel-panel text-pixel-light border border-pixel-border p-2 outline-none focus:shadow-[0_0_10px_rgba(0,255,255,0.3)] transition-shadow"
                       value={selectedGameId}
@@ -127,7 +127,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
 
                   {selectedGame && selectedGame.variants && selectedGame.variants.length > 1 && (
                     <div className="mt-2">
-                      <label className="block text-pixel-cyan mb-2 text-sm uppercase">Select Variant:</label>
+                      <label className="block text-pixel-cyan mb-2 text-sm uppercase">Выберите версию:</label>
                       <div className="flex flex-col gap-2">
                         {selectedGame.variants.map((v, idx) => (
                           <label key={idx} className="flex items-start gap-2 cursor-pointer text-sm text-pixel-light hover:text-pixel-cyan transition-colors">
@@ -152,7 +152,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                     className="mt-4 w-full bg-pixel-cyan hover:bg-[#3498db] text-pixel-void font-bold py-2 border-2 border-pixel-light shadow-pixel hover:translate-y-[2px] transition-all hover:shadow-[0_0_15px_rgba(0,255,255,0.5)]"
                     onClick={handleNextStep1}
                   >
-                    Find Game →
+                    Найти игру →
                   </button>
                 </div>
               )}
@@ -162,17 +162,17 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                   {isSearching ? (
                     <div className="flex flex-col items-center justify-center py-8 text-pixel-cyan">
                       <Loader2 className="animate-spin mb-2" size={32} />
-                      <span className="animate-pulse">Searching...</span>
+                      <span className="animate-pulse">Поиск игры...</span>
                     </div>
                   ) : (
                     <>
                       {gamePath ? (
                         <div className="bg-[#103010] border-2 border-green-500 p-3 rounded text-sm text-green-400 break-all shadow-[0_0_10px_rgba(34,197,94,0.3)]">
-                          ✓ Found: {gamePath}
+                          ✓ Найдено: {gamePath}
                         </div>
                       ) : (
                         <div className="bg-[#302010] border-2 border-pixel-amber p-3 rounded text-sm text-pixel-amber shadow-[0_0_10px_rgba(245,158,11,0.3)]">
-                          ! Game not found automatically.
+                          ! Игра не найдена автоматически.
                         </div>
                       )}
                       
@@ -184,7 +184,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                           >
                             <div className="flex justify-center items-center gap-2">
                               <FolderSearch size={16} /> 
-                              <span className="text-xs">{gamePath ? "Change Path" : "Browse..."}</span>
+                              <span className="text-xs">{gamePath ? "Изменить путь" : "Обзор..."}</span>
                             </div>
                           </button>
                           <button 
@@ -192,7 +192,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                             onClick={handleInstall}
                             disabled={!gamePath}
                           >
-                            Install →
+                            Установить →
                           </button>
                         </div>
                         
@@ -209,7 +209,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                                 onComplete();
                               }}
                             >
-                              Skip (Already Configured)
+                              Пропустить (Уже настроено)
                             </button>
                             <span className="text-[10px] text-pixel-muted mt-1.5 text-center px-2">
                               Если REFramework уже установлен, просто пропустите шаг.
@@ -254,7 +254,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                   >
                     <Check size={48} className="text-green-500 mb-2 drop-shadow-[0_0_15px_rgba(34,197,94,0.8)]" />
                   </motion.div>
-                  <p className="text-sm text-pixel-light">RE:Control successfully installed! Launch the game, then press Start Crowd Control.</p>
+                  <p className="text-sm text-pixel-light">RE:Control успешно установлен! Запустите игру и перейдите в панель управления.</p>
                   
                   {isUpdating && (
                     <div className="w-full mt-2">
@@ -273,7 +273,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                     onClick={onComplete}
                     disabled={isUpdating}
                   >
-                    Open Control Panel
+                    Открыть панель управления
                   </button>
                   <button 
                     className="w-full bg-pixel-muted hover:bg-pixel-border text-pixel-light font-bold py-2 border-2 border-pixel-light shadow-pixel transition-all flex justify-center items-center gap-2 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)]"
@@ -281,7 +281,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                     disabled={isUpdating}
                   >
                     <RefreshCw size={14} className={isUpdating ? "animate-spin" : ""} />
-                    <span className="text-xs">Update Scripts</span>
+                    <span className="text-xs">Обновить скрипты</span>
                   </button>
                 </div>
               )}

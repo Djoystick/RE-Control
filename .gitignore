@@ -23,3 +23,11 @@ assets/audio/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Backups & Temporary Probes
+*.bak*
+*.backup
+test_dump.lua
+merge_*.py
+old_effects.lua
+

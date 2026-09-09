@@ -27,6 +27,8 @@ export class VotingManager extends EventEmitter {
     private timer: ReturnType<typeof setInterval> | null = null;
     private cooldownTimer: NodeJS.Timeout | null = null;
     private timeRemainingMs: number = 0;
+    private lastVotedOptionId: number | null = null;
+    private consecutiveVotesCount: number = 0;
     
     private readonly VOTE_DURATION_MS = 60000; // 60 seconds to vote
     private COOLDOWN_DURATION_MS = 600000; // 10 minutes cooldown (Marathon pacing default)
@@ -97,6 +99,8 @@ export class VotingManager extends EventEmitter {
         
         this.interventionState = null;
         this.timeRemainingMs = this.VOTE_DURATION_MS;
+        this.lastVotedOptionId = null;
+        this.consecutiveVotesCount = 0;
         
         // Pick 3 random options
         const posPool = this.effectPool.filter(e => e.category === 'positive');
@@ -224,8 +228,22 @@ export class VotingManager extends EventEmitter {
             if (option) {
                 option.votes++;
 
-                // Add karma
-                dbManager.addVote(cmd.username, option.effectId);
+                // Track MEGA combo (5 in a row for the same option)
+                if (this.lastVotedOptionId === option.id) {
+                    this.consecutiveVotesCount++;
+                    if (this.consecutiveVotesCount >= 5 && !(option as any).isMega) {
+                        (option as any).isMega = true;
+                        sysLogger.info(`🔥 MEGA STATUS UNLOCKED for [${option.displayName}] (5 consecutive votes)!`);
+                    }
+                } else {
+                    this.lastVotedOptionId = option.id;
+                    this.consecutiveVotesCount = 1;
+                }
+
+                // Add karma based on effect category
+                const effectDef = this.effectPool.find(e => e.id === option.effectId);
+                const category = effectDef?.category || 'positive';
+                dbManager.addVote(cmd.username, option.effectId, category);
                 
                 this.emit('vote:update', this.getState());
             }
@@ -238,13 +256,15 @@ export class VotingManager extends EventEmitter {
         if (this.interventionTimer) { clearTimeout(this.interventionTimer); this.interventionTimer = null; }
         this.isActive = false;
 
-        // Determine winner
-        let winner = this.options[0];
+        // Determine winner with fair tie-breaking
+        let maxVotes = -1;
         for (const opt of this.options) {
-            if (opt.votes > winner.votes) {
-                winner = opt;
+            if (opt.votes > maxVotes) {
+                maxVotes = opt.votes;
             }
         }
+        const topOptions = this.options.filter(opt => opt.votes === maxVotes);
+        const winner = topOptions[Math.floor(Math.random() * topOptions.length)] || this.options[0];
 
         sysLogger.info('Voting ended. Winner: ' + winner.displayName + ' with ' + winner.votes + ' votes.');
         
@@ -318,22 +338,40 @@ getState(): VoteState {
         let message = '';
 
         switch (chosen) {
-            case 'veto':
-                this.options.sort((a, b) => b.votes - a.votes);
-                const removed = this.options.shift();
-                message = `🛑 ВЕТО АМБРЕЛЛЫ! Лидирующая опция [${removed?.displayName}] удалена!`;
+            case 'veto': {
+                if (this.options.length > 1) {
+                    let leaderIdx = 0;
+                    for (let i = 1; i < this.options.length; i++) {
+                        if (this.options[i].votes > this.options[leaderIdx].votes) {
+                            leaderIdx = i;
+                        }
+                    }
+                    const removed = this.options.splice(leaderIdx, 1)[0];
+                    // Renumber remaining options cleanly
+                    this.options.forEach((opt, idx) => {
+                        opt.id = idx + 1;
+                    });
+                    message = `🛑 ВЕТО АМБРЕЛЛЫ! Лидирующая опция [${removed?.displayName}] удалена! Голосуйте за оставшиеся!`;
+                }
                 break;
-            case 'invert':
-                this.options.sort((a, b) => b.votes - a.votes);
+            }
+            case 'invert': {
                 if (this.options.length >= 2) {
-                    const first = this.options[0];
-                    const last = this.options[this.options.length - 1];
-                    const temp = first.votes;
-                    first.votes = last.votes;
-                    last.votes = temp;
+                    let maxOpt = this.options[0];
+                    let minOpt = this.options[0];
+                    for (const opt of this.options) {
+                        if (opt.votes > maxOpt.votes) maxOpt = opt;
+                        if (opt.votes < minOpt.votes) minOpt = opt;
+                    }
+                    if (maxOpt !== minOpt) {
+                        const temp = maxOpt.votes;
+                        maxOpt.votes = minOpt.votes;
+                        minOpt.votes = temp;
+                    }
                 }
                 message = `🔄 ИНВЕРСИЯ! Голоса лидера и аутсайдера поменялись местами!`;
                 break;
+            }
             case 'blind':
                 message = `🙈 СЛЕПАЯ ЗОНА! Прогресс голосования скрыт!`;
                 break;

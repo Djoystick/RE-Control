@@ -1,4 +1,4 @@
-﻿appId: com.electron.app
+appId: com.electron.app
 productName: re-control
 directories:
   buildResources: build
@@ -11,6 +11,13 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+extraResources:
+  - from: assets/audio
+    to: assets/audio
+  - from: re_frameworks
+    to: re_frameworks
+  - from: lua_scripts
+    to: lua_scripts
 win:
   executableName: re-control
 nsis:

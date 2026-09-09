@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,300..900;1,300..900&family=JetBrains+Mono:ital,wght@0,300..800;1,300..800&family=Orbitron:wght@500..900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -32,9 +32,10 @@ body,
 }
 
 body {
-  font-family: 'Pixelify Sans', 'Courier New', monospace;
-  -webkit-font-smoothing: none;
-  font-smooth: never;
+  font-family: 'Exo 2', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   color: var(--rc-text);
   margin: 0;
   padding: 0;
@@ -43,15 +44,18 @@ body {
 }
 
 .font-telemetry {
-  font-family: 'Pixelify Sans', 'Courier New', monospace;
-  -webkit-font-smoothing: none;
-  font-smooth: never;
+  font-family: 'JetBrains Mono', monospace;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .font-logo {
-  font-family: 'Press Start 2P', monospace;
-  -webkit-font-smoothing: none;
-  font-smooth: never;
+  font-family: 'Orbitron', 'Exo 2', sans-serif;
+  letter-spacing: 0.12em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* === RETROWAVE BACKDROP (compact widget edition) === */
@@ -697,9 +701,10 @@ body {
   outline: none;
   transition: all 0.1s;
   text-transform: uppercase;
-  font-family: 'Pixelify Sans', 'Courier New', monospace;
-  -webkit-font-smoothing: none;
-  font-smooth: never;
+  font-family: 'Exo 2', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   position: relative;
 }
 .pixel-btn:hover {
@@ -754,9 +759,10 @@ body {
   width: 100%;
   box-shadow: inset 2px 2px 0 0 rgba(0, 0, 1, 0.5);
   outline: none;
-  font-family: 'Pixelify Sans', 'Courier New', monospace;
-  -webkit-font-smoothing: none;
-  font-smooth: never;
+  font-family: 'Exo 2', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   font-size: 11px;
   transition: border-color 0.15s;
 }
@@ -980,9 +986,10 @@ body {
 }
 
 .rc-ver {
-  font-family: 'Pixelify Sans', 'Courier New', monospace;
-  -webkit-font-smoothing: none;
-  font-smooth: never;
+  font-family: 'Exo 2', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   font-size: 14px;
   color: rgba(244, 244, 244, 0.85);
   letter-spacing: 1px;
@@ -1039,9 +1046,10 @@ body {
 .rc-tgl-min {
   width: 22px;
   color: var(--rc-cyan);
-  font-family: 'Pixelify Sans', 'Courier New', monospace;
-  -webkit-font-smoothing: none;
-  font-smooth: never;
+  font-family: 'Exo 2', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   font-size: 13px;
   line-height: 1;
 }

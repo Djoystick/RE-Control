@@ -28,12 +28,13 @@ interface EffectState {
 
 
 const activeAudios = new Set<HTMLAudioElement>();
+let overlayVolume = 0.8;
 
-async function playFilteredAudio(base64: string, _type: string) {
-    // Так как фильтры Web Audio API были удалены по просьбе пользователя,
-    // мы используем стандартный, максимально надежный HTML5 Audio плеер.
+async function playFilteredAudio(base64: string, _type: string, volume?: number) {
     return new Promise<void>((resolve, reject) => {
         const audio = new Audio(`data:audio/ogg;base64,${base64}`);
+        const finalVol = typeof volume === 'number' ? volume : overlayVolume;
+        audio.volume = Math.max(0, Math.min(1, finalVol));
         activeAudios.add(audio);
         
         audio.onended = () => {
@@ -86,10 +87,14 @@ export default function OverlayApp() {
             setInterventionBanner(msg.data)
             clearTimeout(bannerTimer)
             bannerTimer = setTimeout(() => setInterventionBanner(null), 8000)
+          } else if (msg.type === 'narrator:set-volume') {
+            if (typeof msg.data?.volume === 'number') {
+              overlayVolume = Math.max(0, Math.min(1, msg.data.volume))
+            }
           } else if (msg.type === 'narrator:audio') {
             setNarratorData({ text: msg.data.subtitle, type: msg.data.type })
             setTimeout(() => setNarratorData(null), 6000)
-            playFilteredAudio(msg.data.base64, msg.data.type).catch(e => setNarratorData({ text: 'AUDIO ERROR: ' + e.message, type: 'veto' }))
+            playFilteredAudio(msg.data.base64, msg.data.type, msg.data.volume).catch(e => setNarratorData({ text: 'AUDIO ERROR: ' + e.message, type: 'veto' }))
           } else if (msg.type === 'narrator:speak') {
             setNarratorData({ text: msg.data.text, type: msg.data.type || 'veto' })
             clearTimeout(narratorTimer)

@@ -9,17 +9,18 @@ declare global {
       updateSettings: (settings: any) => void
       connectTwitch: (channel: string) => void
       disconnectTwitch: () => void
-      onTwitchStatus: (callback: (status: any) => void) => void
+      onTwitchStatus: (callback: (status: any) => void) => () => void
       closeWindow: () => void
       minimizeWindow: () => void
-      onSimulatorLog: (callback: (cmd: any) => void) => void
-      onSimulatorSyslog: (callback: (data: any) => void) => void
-      onVoteUpdate: (callback: (state: any) => void) => void
+      onSimulatorLog: (callback: (cmd: any) => void) => () => void
+      onSimulatorSyslog: (callback: (data: any) => void) => () => void
+      onVoteUpdate: (callback: (state: any) => void) => () => void
       getLeaderboard: () => Promise<any>
       invokeTraitor: () => Promise<boolean>
-      onTraitorStart: (callback: (state: any) => void) => void
-      onTraitorEnd: (callback: (state: any) => void) => void
-      onTrustedCount: (callback: (count: number) => void) => void
+      onTraitorStart: (callback: (state: any) => void) => () => void
+      onTraitorEnd: (callback: (state: any) => void) => () => void
+      onTrustedCount: (callback: (count: number) => void) => () => void
+      removeListener?: (channel: string, listener: (...args: any[]) => void) => void
       saveTwitchAuth: (username: string, token: string, channel: string) => Promise<void>
       getTwitchAuth: () => Promise<{ username: string; token: string; channel?: string } | null>
       validateTwitchToken: (token: string) => Promise<boolean>
@@ -30,11 +31,17 @@ declare global {
       browseExe: () => Promise<{ canceled: boolean; filePaths: string[] }>
       install: (gamePath: string, archiveName: string) => Promise<void>
       updateScripts: (gamePath: string) => Promise<void>
-      onInstallProgress: (cb: (data: { percent: number; message: string }) => void) => void
+      onInstallProgress: (cb: (data: { percent: number; message: string }) => void) => () => void
       saveStoredGamePath: (path: string) => Promise<void>
       getStoredGamePath: () => Promise<string | null>
       getHotkeys: () => Promise<{ traitor: string; intervention: string }>
       saveHotkeys: (hotkeys: { traitor: string; intervention: string }) => Promise<void>
+      getVolume: () => Promise<number>
+      setVolume: (volume: number) => Promise<number>
+      getObsStatus: () => Promise<{ connected: boolean; count: number }>
+      onObsStatus: (cb: (data: { connected: boolean; count: number }) => void) => () => void
+      getRemoteInfo: () => Promise<{ url: string; qr: string; clients: number }>
+      triggerEffect: (effectId: string) => Promise<string>
     }
   }
 }

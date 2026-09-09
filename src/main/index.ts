@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { app, shell, BrowserWindow, ipcMain, globalShortcut } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut, safeStorage } from 'electron'
 import { join } from 'path'
 import { execFile } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -9,7 +9,7 @@ import { TwitchBridge } from './chat-bridge/TwitchBridge'
 import { DonationBridge } from './chat-bridge/DonationBridge'
 import { REBridge } from './game-bridge/REBridge'
 import { VotingManager } from './game-bridge/VotingManager'
-import { narrator } from './ai-narrator/Narrator'
+import { narrator, getAudioBasePath } from './ai-narrator/Narrator'
 import { sysLogger } from './utils/logger'
 import { dbManager } from './db/DatabaseManager'
 import { SUPPORTED_GAMES } from './setup/GameDatabase'
@@ -83,6 +83,23 @@ function createWindow(): void {
 
   registerGlobalHotkeys();
 
+  // --- AUDIO VOLUME IPC ---
+  const AUDIO_CONFIG_FILE = join(app.getPath('userData'), 'audio_config.json');
+
+  function getAudioVolume(): number {
+    if (fs.existsSync(AUDIO_CONFIG_FILE)) {
+      try {
+        const conf = JSON.parse(fs.readFileSync(AUDIO_CONFIG_FILE, 'utf8'));
+        if (typeof conf.volume === 'number') return conf.volume;
+      } catch (e) {}
+    }
+    return 80;
+  }
+
+  narrator.setVolume(getAudioVolume() / 100);
+
+  ipcMain.handle('settings:getVolume', () => getAudioVolume());
+
   // Expose DB IPC
   ipcMain.handle('db:getLeaderboard', () => {
     return dbManager.getTopKarma(5);
@@ -90,13 +107,36 @@ function createWindow(): void {
 
   ipcMain.handle('settings:saveTwitchAuth', (_, { username, token, channel }) => {
     const configPath = join(app.getPath('userData'), 'twitch_config.json')
-    fs.writeFileSync(configPath, JSON.stringify({ username, token, channel }))
+    const payload: any = { username, channel }
+    if (token) {
+      if (safeStorage.isEncryptionAvailable()) {
+        payload.encryptedToken = safeStorage.encryptString(token).toString('base64')
+        payload.isEncrypted = true
+      } else {
+        payload.token = token
+        payload.isEncrypted = false
+      }
+    }
+    fs.writeFileSync(configPath, JSON.stringify(payload, null, 2))
+    return { success: true }
   })
 
   ipcMain.handle('settings:getTwitchAuth', () => {
     const configPath = join(app.getPath('userData'), 'twitch_config.json')
     if (fs.existsSync(configPath)) {
-      return JSON.parse(fs.readFileSync(configPath, 'utf8'))
+      try {
+        const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+        let token = ''
+        if (raw.isEncrypted && raw.encryptedToken && safeStorage.isEncryptionAvailable()) {
+          token = safeStorage.decryptString(Buffer.from(raw.encryptedToken, 'base64'))
+        } else if (raw.token) {
+          token = raw.token
+        }
+        return { username: raw.username || '', channel: raw.channel || '', token }
+      } catch (e) {
+        sysLogger.error('Failed to read twitch auth config: ' + e)
+        return null
+      }
     }
     return null
   })
@@ -249,6 +289,68 @@ function createWindow(): void {
     narrator.setEnabled(val)
   })
 
+  ipcMain.handle('settings:setVolume', (_, vol: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(vol)))
+    try {
+      fs.writeFileSync(AUDIO_CONFIG_FILE, JSON.stringify({ volume: clamped }, null, 2))
+    } catch (e) {}
+    narrator.setVolume(clamped / 100)
+    overlayServer.broadcast('narrator:set-volume', clamped / 100)
+    return clamped
+  })
+
+  overlayServer.on('clients:update', (count: number) => {
+    mainWindow.webContents.send('obs:status', { connected: count > 0, count })
+  })
+
+  ipcMain.handle('obs:getStatus', () => {
+    const count = overlayServer.getClientCount()
+    return { connected: count > 0, count }
+  })
+
+  // --- WEB REMOTE (STREAM DECK) ---
+  overlayServer.on('effect:trigger', (effectId: string) => {
+    sysLogger.info(`[Main] Executing WebRemote effect: ${effectId}`);
+    mainWindow.webContents.send('simulator:syslog', { message: `WEB REMOTE: ${effectId}` });
+    gameBridge.sendCommand(effectId).catch((err) => {
+      sysLogger.error(`[Main] Error executing WebRemote effect:`, err);
+    });
+  });
+
+  overlayServer.on('vote:action', (action: string) => {
+    sysLogger.info(`[Main] WebRemote vote action: ${action}`);
+    if (action === 'start') {
+      votingManager.startCycle();
+    } else if (action === 'stop') {
+      votingManager.stop();
+    } else if (action === 'intervention') {
+      (votingManager as any).rollIntervention(true);
+    }
+  });
+
+  ipcMain.handle('remote:getInfo', async () => {
+    try {
+      const qr = await overlayServer.getQrCode();
+      return {
+        url: overlayServer.getLocalUrl(),
+        qr,
+        clients: overlayServer.getClientCount()
+      };
+    } catch (e: any) {
+      return {
+        url: overlayServer.getLocalUrl(),
+        qr: '',
+        clients: overlayServer.getClientCount()
+      };
+    }
+  });
+
+  ipcMain.handle('remote:triggerEffect', async (_, effectId: string) => {
+    sysLogger.info(`[Main] Manual test trigger: ${effectId}`);
+    mainWindow.webContents.send('simulator:syslog', { message: `MANUAL TEST: ${effectId}` });
+    return gameBridge.sendCommand(effectId);
+  });
+
   votingManager.on('vote:tick', (state) => {
     mainWindow.webContents.send('vote:update', state)
     overlayServer.broadcast('vote:update', state)
@@ -285,6 +387,9 @@ function createWindow(): void {
 
   votingManager.on('traitor:start', (state) => {
     simulator.stopSimulating()
+    if (!activeTwitchChannel) {
+      simulator.setTraitor(state.username)
+    }
     mainWindow.webContents.send('traitor:start', state)
     mainWindow.webContents.send('simulator:syslog', { message: `TRAITOR MODE STARTED! Traitor: ${state.username}` })
     overlayServer.broadcast('traitor:start', state)
@@ -295,6 +400,10 @@ function createWindow(): void {
   })
 
   votingManager.on('traitor:end', (state) => {
+    simulator.setTraitor(null)
+    if (!activeTwitchChannel) {
+      simulator.startSimulating(500)
+    }
     mainWindow.webContents.send('traitor:end', state)
     mainWindow.webContents.send('simulator:syslog', { message: `TRAITOR MODE ENDED!` })
   })
@@ -335,7 +444,7 @@ function createWindow(): void {
   // ─── AUDIO TESTER IPC ───
   ipcMain.handle('audio:get-files', async () => {
     const fsPromises = require('node:fs/promises');
-    const base = join(process.cwd(), 'assets', 'audio')
+    const base = getAudioBasePath()
     const result: Record<string, string[]> = {}
     if (fs.existsSync(base)) {
       const folders = await fsPromises.readdir(base)
@@ -353,7 +462,7 @@ function createWindow(): void {
 
   ipcMain.handle('audio:read-file', async (_, folder: string, file: string) => {
     const fsPromises = require('node:fs/promises');
-    const filePath = join(process.cwd(), 'assets', 'audio', folder, file)
+    const filePath = join(getAudioBasePath(), folder, file)
     if (fs.existsSync(filePath)) {
       const buffer = await fsPromises.readFile(filePath)
       return buffer.toString('base64')
@@ -463,17 +572,32 @@ function createWindow(): void {
   })
 }
 
-app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.electron')
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
-  })
-  createWindow()
+const gotTheLock = app.requestSingleInstanceLock()
 
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const allWindows = BrowserWindow.getAllWindows()
+    if (allWindows.length > 0) {
+      const mainWindow = allWindows[0]
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
   })
-})
+
+  app.whenReady().then(() => {
+    electronApp.setAppUserModelId('com.electron')
+    app.on('browser-window-created', (_, window) => {
+      optimizer.watchWindowShortcuts(window)
+    })
+    createWindow()
+
+    app.on('activate', function () {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+  })
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

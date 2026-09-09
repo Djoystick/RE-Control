@@ -2,50 +2,24 @@ local Effects = {}
 
 Effects.active_states = {
     blackout = 0,
-    ui_wipe = 0,
     static_burst = 0,
     invert = 0,
-    auto_run = 0,
-    base_speed = 1.0,
     speed_up = 0,
     slow_down = 0,
-    infinite_ammo = 0,
     freeze = 0,
-    big_head = 0,
+    infinite_ammo = 0,
+    drunk = 0,
+    hop_timer = 0,
+    hop_height = 0,
     fov_narrow = 0,
-    fov_wide = 0,
-    mute_sound = 0,
-    orig_fov = 90.0,
-    orig_speed = 1.0
+    fov_wide = 0
 }
 
--- Вспомогательные функции для получения объектов
+-- Вспомогательные функции для получения объектов движка RE2
 local function get_player()
     local sm = sdk.get_managed_singleton("app.ropeway.SurvivorManager")
     if not sm then return nil end
-    local player = sm:call("get_PlayerSurvivor")
-    if not player then player = sm:call("get_Survivor") end
-    if not player then player = sm:call("get_Player") end
-    return player
-end
-
-local function get_inventory()
-    local player = get_player()
-    if not player then return nil end
-    local inventory = player:call("get_Inventory")
-    if not inventory then
-        local im = sdk.get_managed_singleton("app.ropeway.InventoryManager")
-        if im then inventory = im:call("get_Inventory") end
-    end
-    return inventory
-end
-
-local function get_position(player)
-    local transform = player:call("get_Transform")
-    if transform then
-        return transform:call("get_Position")
-    end
-    return nil
+    return sm:call("get_Player") or sm:call("get_Survivor") or sm:call("get_PlayerSurvivor")
 end
 
 local function get_player_gameobject()
@@ -56,643 +30,175 @@ local function get_player_gameobject()
     return nil
 end
 
--- 1. Полное лечение игрока
-function Effects.heal_full()
-    log.info("[RE:Control] Активирован эффект: heal_full")
+local function get_hit_point_controller()
+    local go = get_player_gameobject()
+    if not go then return nil end
+    return go:call("getComponent(System.Type)", sdk.typeof("app.ropeway.HitPointController"))
+end
+
+local function get_inventory()
     local player = get_player()
-    if not player then return end
-    pcall(function()
-        local params = player:call("get_CharacterParameter") or player:call("getCharacterParameters")
-        if params then
-            local survivor_status_type = sdk.find_type_definition("app.ropeway.survivor.SurvivorStatus")
-            local fine_status = survivor_status_type:get_field("Fine"):get_data(nil)
-            params:call("setStatus", fine_status)
-            local max_life = params:call("get_MaxLife") or params:call("getMaxLife")
-            params:call("setLife", max_life)
-            params:call("set_Life", max_life)
-        end
-    end)
+    if not player then return nil end
+    return player:call("get_Inventory")
 end
 
--- 2. Нанесение урона
-function Effects.damage_half()
-    log.info("[RE:Control] Активирован эффект: damage_half")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local params = player:call("get_CharacterParameter") or player:call("getCharacterParameters")
-        if params then
-            local current_life = params:call("get_Life") or params:call("getLife")
-            local max_life = params:call("get_MaxLife") or params:call("getMaxLife")
-            local new_life = math.max(current_life - math.floor(max_life * 0.5), 1)
-            params:call("setLife", new_life)
-            params:call("set_Life", new_life)
-            
-            local survivor_status_type = sdk.find_type_definition("app.ropeway.survivor.SurvivorStatus")
-            local danger_status = survivor_status_type:get_field("Danger"):get_data(nil)
-            local caution_status = survivor_status_type:get_field("Caution"):get_data(nil)
-            if new_life <= max_life * 0.25 then
-                params:call("setStatus", danger_status)
-            else
-                params:call("setStatus", caution_status)
-            end
-        end
-    end)
+local function get_main_slot()
+    local inv = get_inventory()
+    if not inv then return nil end
+    return inv:call("get_MainSlot")
 end
 
--- 3. Пополнение патронов в магазине
-function Effects.refill_ammo()
-    log.info("[RE:Control] Активирован эффект: refill_ammo")
-    local inventory = get_inventory()
-    if not inventory then return end
-    pcall(function()
-        local weapon = inventory:call("get_EquipItem") or inventory:call("getEquipItem")
-        if weapon then
-            local item_type_def = sdk.find_type_definition("app.ropeway.ItemType")
-            local weapon_type = item_type_def:get_field("Weapon"):get_data(nil)
-            if weapon:call("get_Type") == weapon_type or weapon:call("getType") == weapon_type then
-                local bullets = weapon:call("get_Bullets") or weapon:call("getBullets")
-                local max_ammo = weapon:call("get_MaxBullets") or weapon:call("getMaxBullets")
-                if bullets then
-                    bullets:call("set_Current", max_ammo)
-                    bullets:call("setCurrent", max_ammo)
-                end
-            end
-        end
-    end)
+local function get_player_motion()
+    local go = get_player_gameobject()
+    if not go then return nil end
+    return go:call("getComponent(System.Type)", sdk.typeof("via.motion.Motion"))
 end
 
--- 4. Очистка магазина
-function Effects.empty_ammo()
-    log.info("[RE:Control] Активирован эффект: empty_ammo")
-    local inventory = get_inventory()
-    if not inventory then return end
-    pcall(function()
-        local weapon = inventory:call("get_EquipItem") or inventory:call("getEquipItem")
-        if weapon then
-            local item_type_def = sdk.find_type_definition("app.ropeway.ItemType")
-            local weapon_type = item_type_def:get_field("Weapon"):get_data(nil)
-            if weapon:call("get_Type") == weapon_type or weapon:call("getType") == weapon_type then
-                local bullets = weapon:call("get_Bullets") or weapon:call("getBullets")
-                if bullets then
-                    bullets:call("set_Current", 0)
-                    bullets:call("setCurrent", 0)
-                end
-            end
-        end
-    end)
+local function get_camera_system()
+    return sdk.get_managed_singleton("app.ropeway.camera.CameraSystem")
 end
 
--- 5. Добавление First Aid Spray
-function Effects.add_item()
-    log.info("[RE:Control] Активирован эффект: add_item")
-    local inventory = get_inventory()
-    if not inventory then return end
-    pcall(function()
-        local item_type_def = sdk.find_type_definition("app.ropeway.ItemType")
-        local spray_type = item_type_def:get_field("FirstAidSpray"):get_data(nil)
-        inventory:call("addItem", spray_type, 1)
-    end)
-end
+-- Вспомогательная функция добавления патронов в инвентарь (в карман)
+local function add_bullets_to_inventory(bullet_id, amount)
+    if not amount or amount <= 0 then return end
+    local inv = get_inventory()
+    if not inv then return end
 
--- 6. Удаление случайного лечения или патронов
-function Effects.remove_item()
-    log.info("[RE:Control] Активирован эффект: remove_item")
-    local inventory = get_inventory()
-    if not inventory then return end
+    -- 1. Добавляем в буфер запаса оружия
     pcall(function()
-        local items = inventory:call("get_Items") or inventory:call("getItems")
-        if items then
-            local size = items:call("get_Count") or items:call("size")
-            local target_index = nil
-            local item_type_def = sdk.find_type_definition("app.ropeway.ItemType")
-            local heal_type = item_type_def:get_field("HealItem"):get_data(nil)
-            local ammo_type = item_type_def:get_field("Ammo"):get_data(nil)
-            for i = 0, size - 1 do
-                local item = items:call("get_Item", i) or items:call("at", i)
-                if item then
-                    local t = item:call("get_Type") or item:call("getType")
-                    if t == heal_type or t == ammo_type then
-                        target_index = i
-                        break
+        local surplus = inv:call("get_MainSlotSurplusBulletNumber") or 0
+        inv:call("set_MainSlotSurplusBulletNumber", surplus + amount)
+        log.info("[RE:Control] Surplus запаса увеличен на " .. tostring(amount))
+    end)
+
+    -- 2. Ищем физическую пачку патронов в слотах инвентаря
+    pcall(function()
+        local slots = inv:call("get_Slots")
+        if slots then
+            local count = slots:call("get_Count") or slots:call("get_Length") or slots:call("get_Size")
+            if count then
+                for i = 0, count - 1 do
+                    local s = slots:call("get_Item", i) or (slots.get_element and slots:get_element(i))
+                    if s then
+                        local s_bullet_id = s:call("get_BulletID")
+                        if not bullet_id or s_bullet_id == bullet_id then
+                            local cur_num = s:call("get_Number") or 0
+                            local max_num = s:call("get_MaxNumber") or 60
+                            s:call("set_Number", math.min(max_num, cur_num + amount))
+                            log.info("[RE:Control] Патроны добавлены в слот инвентаря #" .. tostring(i) .. " (было " .. tostring(cur_num) .. ")")
+                            return
+                        end
                     end
                 end
             end
-            if target_index then
-                inventory:call("removeItem", target_index)
-            end
         end
     end)
 end
 
--- 7. Спавн зомби
-function Effects.spawn_zombie()
-    log.info("[RE:Control] Активирован эффект: spawn_zombie")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local pos = get_position(player)
-        local enemy_manager = sdk.get_managed_singleton("app.ropeway.EnemyManager")
-        if enemy_manager and pos then
-            local setting = enemy_manager:call("get_EnemySetting") or enemy_manager:call("getEnemySetting")
-            local offset = setting:call("get_DefaultOffset") or setting:call("getDefaultOffset")
-            local enemy_type_def = sdk.find_type_definition("app.ropeway.EnemyType")
-            local zombie_type = enemy_type_def:get_field("Zombie"):get_data(nil)
-            local spawn_pos = pos
-            if offset then
-                spawn_pos.x = spawn_pos.x + offset.x
-                spawn_pos.y = spawn_pos.y + offset.y
-                spawn_pos.z = spawn_pos.z + offset.z
-            end
-            enemy_manager:call("spawnEnemy", zombie_type, spawn_pos)
-        end
-    end)
-end
-
--- 8. Спавн Лизунга
-function Effects.spawn_licker()
-    log.info("[RE:Control] Активирован эффект: spawn_licker")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local pos = get_position(player)
-        local enemy_manager = sdk.get_managed_singleton("app.ropeway.EnemyManager")
-        if enemy_manager and pos then
-            local setting = enemy_manager:call("get_EnemySetting") or enemy_manager:call("getEnemySetting")
-            local offset = setting:call("get_DefaultOffset") or setting:call("getDefaultOffset")
-            local enemy_type_def = sdk.find_type_definition("app.ropeway.EnemyType")
-            local licker_type = enemy_type_def:get_field("Licker"):get_data(nil)
-            local spawn_pos = pos
-            if offset then
-                spawn_pos.x = spawn_pos.x + offset.x
-                spawn_pos.y = spawn_pos.y + offset.y
-                spawn_pos.z = spawn_pos.z + offset.z
-            end
-            enemy_manager:call("spawnEnemy", licker_type, spawn_pos)
-        end
-    end)
-end
-
--- 9. Увеличение скорости на 10 секунд
-function Effects.speed_up()
-    log.info("[RE:Control] Активирован эффект: speed_up")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local params = player:call("get_CharacterParameter") or player:call("getCharacterParameters")
-        if params then
-            local base_speed = params:call("get_MoveSpeedRate") or params:call("getMoveSpeedRate") or 1.0
-            Effects.active_states.orig_speed = base_speed
-            params:call("setMoveSpeedRate", base_speed * 2.0)
-            params:call("set_MoveSpeedRate", base_speed * 2.0)
-            Effects.active_states.speed_up = 10.0
-        end
-    end)
-end
-
--- 10. Резкий страх: тряска камеры и звук
-function Effects.jumpscare()
-    log.info("[RE:Control] Активирован эффект: jumpscare")
-    pcall(function()
-        local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
-        local camera = nil
-        if cm then camera = cm:call("get_Camera") or cm:call("get_MainCamera") end
-        if camera then
-            camera:call("shake", 0.5, 1.0, 15.0)
-        end
-        local sound = sdk.get_managed_singleton("app.ropeway.SoundManager")
-        if sound then
-            sound:call("play", "event_survivor_scream", 1.0, 1.0)
-        end
-    end)
-end
-
--- 11. slow_down
-function Effects.slow_down()
-    log.info("[RE:Control] Активирован эффект: slow_down")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local params = player:call("get_CharacterParameter") or player:call("getCharacterParameters")
-        if params then
-            local base_speed = params:call("get_MoveSpeedRate") or params:call("getMoveSpeedRate") or 1.0
-            Effects.active_states.orig_speed = base_speed
-            params:call("setMoveSpeedRate", base_speed * 0.5)
-            params:call("set_MoveSpeedRate", base_speed * 0.5)
-            Effects.active_states.slow_down = 10.0
-        end
-    end)
-end
-
--- 12. infinite_ammo
-function Effects.infinite_ammo()
-    log.info("[RE:Control] Активирован эффект: infinite_ammo")
-    local inventory = get_inventory()
-    if not inventory then return end
-    pcall(function()
-        local weapon = inventory:call("get_EquipItem") or inventory:call("getEquipItem")
-        if weapon then
-            local item_type_def = sdk.find_type_definition("app.ropeway.ItemType")
-            local weapon_type = item_type_def:get_field("Weapon"):get_data(nil)
-            if weapon:call("get_Type") == weapon_type or weapon:call("getType") == weapon_type then
-                local bullets = weapon:call("get_Bullets") or weapon:call("getBullets")
-                if bullets then
-                    bullets:call("set_Current", 999)
-                    bullets:call("setCurrent", 999)
-                    Effects.active_states.infinite_ammo = 15.0
-                end
-            end
-        end
-    end)
-end
-
--- 13. drop_item
-function Effects.drop_item()
-    log.info("[RE:Control] Активирован эффект: drop_item")
-    local inventory = get_inventory()
-    if not inventory then return end
-    pcall(function()
-        local items = inventory:call("get_Items") or inventory:call("getItems")
-        if items then
-            local size = items:call("get_Count") or items:call("size")
-            if size > 0 then
-                inventory:call("removeItem", size - 1)
-            end
-        end
-    end)
-end
-
--- 14. give_herb
-function Effects.give_herb()
-    log.info("[RE:Control] Активирован эффект: give_herb")
-    local inventory = get_inventory()
-    if not inventory then return end
-    pcall(function()
-        local item_type_def = sdk.find_type_definition("app.ropeway.ItemType")
-        local herb_type = item_type_def:get_field("GreenHerb"):get_data(nil)
-        local spray_type = item_type_def:get_field("FirstAidSpray"):get_data(nil)
-        local success = pcall(function() inventory:call("addItem", herb_type, 1) end)
-        if not success then
-             pcall(function() inventory:call("addItem", spray_type, 1) end)
-        end
-    end)
-end
-
--- 15. teleport_up
-function Effects.teleport_up()
-    log.info("[RE:Control] Активирован эффект: teleport_up")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local transform = player:call("get_Transform")
-        if transform then
-            local pos = transform:call("get_Position")
-            if pos then
-                pos.y = pos.y + 2.0
-                transform:call("set_Position", pos)
-                transform:call("setPosition", pos)
-            end
-        end
-    end)
-end
-
--- 16. freeze
-function Effects.freeze()
-    log.info("[RE:Control] Активирован эффект: freeze")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local params = player:call("get_CharacterParameter") or player:call("getCharacterParameters")
-        if params then
-            local base_speed = params:call("get_MoveSpeedRate") or params:call("getMoveSpeedRate") or 1.0
-            Effects.active_states.orig_speed = base_speed
-            params:call("setMoveSpeedRate", 0.0)
-            params:call("set_MoveSpeedRate", 0.0)
-            Effects.active_states.freeze = 5.0
-        end
-    end)
-end
-
--- 17. big_head
-function Effects.big_head()
-    log.info("[RE:Control] Активирован эффект: big_head")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local transform = player:call("get_Transform")
-        if transform then
-            local head_joint = transform:call("getJointByName", "Head") or transform:call("getJointByName", "head")
-            if head_joint then
-                local scale = head_joint:call("get_LocalScale") or head_joint:call("getLocalScale")
-                if scale then
-                    scale.x, scale.y, scale.z = 3.0, 3.0, 3.0
-                    head_joint:call("set_LocalScale", scale)
-                    head_joint:call("setLocalScale", scale)
-                    Effects.active_states.big_head = 15.0
-                end
-            end
-        end
-    end)
-end
-
--- 18. spawn_dog
-function Effects.spawn_dog()
-    log.info("[RE:Control] Активирован эффект: spawn_dog")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local pos = get_position(player)
-        local enemy_manager = sdk.get_managed_singleton("app.ropeway.EnemyManager")
-        if enemy_manager and pos then
-            local setting = enemy_manager:call("get_EnemySetting") or enemy_manager:call("getEnemySetting")
-            local offset = setting:call("get_DefaultOffset") or setting:call("getDefaultOffset")
-            local enemy_type_def = sdk.find_type_definition("app.ropeway.EnemyType")
-            local dog_type = enemy_type_def:get_field("ZombieDog"):get_data(nil)
-            local spawn_pos = pos
-            if offset then
-                spawn_pos.x = spawn_pos.x + offset.x
-                spawn_pos.y = spawn_pos.y + offset.y
-                spawn_pos.z = spawn_pos.z + offset.z
-            end
-            enemy_manager:call("spawnEnemy", dog_type, spawn_pos)
-        end
-    end)
-end
-
--- 19. spawn_tyrant
-function Effects.spawn_tyrant()
-    log.info("[RE:Control] Активирован эффект: spawn_tyrant")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local pos = get_position(player)
-        local enemy_manager = sdk.get_managed_singleton("app.ropeway.EnemyManager")
-        if enemy_manager and pos then
-            local setting = enemy_manager:call("get_EnemySetting") or enemy_manager:call("getEnemySetting")
-            local offset = setting:call("get_DefaultOffset") or setting:call("getDefaultOffset")
-            local enemy_type_def = sdk.find_type_definition("app.ropeway.EnemyType")
-            local tyrant_type = enemy_type_def:get_field("Tyrant"):get_data(nil)
-            local spawn_pos = pos
-            if offset then
-                spawn_pos.x = spawn_pos.x + offset.x
-                spawn_pos.y = spawn_pos.y + offset.y
-                spawn_pos.z = spawn_pos.z + offset.z
-            end
-            enemy_manager:call("spawnEnemy", tyrant_type, spawn_pos)
-        end
-    end)
-end
-
--- 20. give_grenade
-function Effects.give_grenade()
-    log.info("[RE:Control] Активирован эффект: give_grenade")
-    local inventory = get_inventory()
-    if not inventory then return end
-    pcall(function()
-        local item_type_def = sdk.find_type_definition("app.ropeway.ItemType")
-        local grenade_type = item_type_def:get_field("HandGrenade"):get_data(nil)
-        local spray_type = item_type_def:get_field("FirstAidSpray"):get_data(nil)
-        local success = pcall(function() inventory:call("addItem", grenade_type, 1) end)
-        if not success then
-             pcall(function() inventory:call("addItem", spray_type, 1) end)
-        end
-    end)
-end
-
--- 21. drunk_camera
-function Effects.drunk_camera()
-    log.info("[RE:Control] Активирован эффект: drunk_camera")
-    pcall(function()
-        local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
-        local camera = nil
-        if cm then camera = cm:call("get_Camera") or cm:call("get_MainCamera") end
-        if camera then
-            camera:call("shake", 0.2, 0.5, 10.0)
-        end
-    end)
-end
-
--- 22. heal_small
-function Effects.heal_small()
-    log.info("[RE:Control] Активирован эффект: heal_small")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local params = player:call("get_CharacterParameter") or player:call("getCharacterParameters")
-        if params then
-            local current = params:call("get_Life") or params:call("getLife")
-            local max = params:call("get_MaxLife") or params:call("getMaxLife")
-            local new_life = math.min(max, current + (max * 0.25))
-            params:call("setLife", new_life)
-            params:call("set_Life", new_life)
-            
-            if new_life > max * 0.5 then
-                local survivor_status_type = sdk.find_type_definition("app.ropeway.survivor.SurvivorStatus")
-                local fine_status = survivor_status_type:get_field("Fine"):get_data(nil)
-                params:call("setStatus", fine_status)
-            end
-        end
-    end)
-end
-
-function Effects.push_back()
-    log.info("[RE:Control] Активирован эффект: push_back")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local transform = player:call("get_Transform")
-        if transform then
-            local pos = transform:call("get_Position")
-            local forward = transform:call("get_AxisZ") or transform:call("getAxisZ")
-            if pos and forward then
-                pos.x = pos.x - forward.x
-                pos.y = pos.y - forward.y
-                pos.z = pos.z - forward.z
-                transform:call("set_Position", pos)
-                transform:call("setPosition", pos)
-            end
-        end
-    end)
-end
-
-function Effects.auto_run()
-    log.info("[RE:Control] Effect: auto_run")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local params = player:call("get_CharacterParameter") or player:call("get_CharacterStatus") or player:call("getCharacterParameters")
-        if not params then return end
-        local base_speed = params:call("get_MoveSpeedRate") or params:call("getMoveSpeedRate") or 1.0
-        Effects.active_states.orig_speed = base_speed
-        params:call("set_MoveSpeedRate", base_speed * 3.0)
-        params:call("setMoveSpeedRate", base_speed * 3.0)
-        
-        Effects.active_states.auto_run = 3.0
-    end)
-end
-
-function Effects.fov_narrow()
-    log.info("[RE:Control] Активирован эффект: fov_narrow")
-    pcall(function()
-        local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
-        local camera = nil
-        if cm then camera = cm:call("get_Camera") or cm:call("get_MainCamera") end
-        if camera then
-            local orig = camera:call("get_Fov") or camera:call("getFov") or 90.0
-            Effects.active_states.orig_fov = orig
-            camera:call("set_Fov", orig * 0.5)
-            camera:call("setFov", orig * 0.5)
-            Effects.active_states.fov_narrow = 5.0
-        end
-    end)
-end
-
-function Effects.fov_wide()
-    log.info("[RE:Control] Активирован эффект: fov_wide")
-    pcall(function()
-        local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
-        local camera = nil
-        if cm then camera = cm:call("get_Camera") or cm:call("get_MainCamera") end
-        if camera then
-            local orig = camera:call("get_Fov") or camera:call("getFov") or 90.0
-            camera:call("set_Fov", orig * 1.5)
-            camera:call("setFov", orig * 1.5)
-            Effects.active_states.fov_wide = 10.0
-            Effects.active_states.orig_fov = orig
-        end
-    end)
-end
-
-function Effects.camera_shake()
-    log.info("[RE:Control] Активирован эффект: camera_shake")
-    pcall(function()
-        local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
-        local camera = nil
-        if cm then camera = cm:call("get_Camera") or cm:call("get_MainCamera") end
-        if camera then
-            camera:call("shake", 0.5, 0.5, 5.0)
-        end
-    end)
-end
-
-function Effects.mirror_screen()
-    log.info("[RE:Control] Активирован эффект: mirror_screen")
-    pcall(function()
-        -- Fake mirror_screen
-    end)
-end
-
-function Effects.light_heal()
-    log.info("[RE:Control] Активирован эффект: light_heal")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local params = player:call("get_CharacterParameter") or player:call("getCharacterParameters")
-        if params then
-            local current = params:call("get_Life") or params:call("getLife")
-            local max = params:call("get_MaxLife") or params:call("getMaxLife")
-            local new_life = math.min(max, current + (max * 0.15))
-            params:call("setLife", new_life)
-            params:call("set_Life", new_life)
-            if new_life > max * 0.5 then
-                local survivor_status_type = sdk.find_type_definition("app.ropeway.survivor.SurvivorStatus")
-                local fine_status = survivor_status_type:get_field("Fine"):get_data(nil)
-                params:call("setStatus", fine_status)
-            end
-        end
-    end)
-end
-
-function Effects.papercut()
-    log.info("[RE:Control] Активирован эффект: papercut")
-    local player = get_player()
-    if not player then return end
-    pcall(function()
-        local params = player:call("get_CharacterParameter") or player:call("getCharacterParameters")
-        if params then
-            local current = params:call("get_Life") or params:call("getLife")
-            local max = params:call("get_MaxLife") or params:call("getMaxLife")
-            local new_life = math.max(1, current - (max * 0.10))
-            params:call("setLife", new_life)
-            params:call("set_Life", new_life)
-            
-            local survivor_status_type = sdk.find_type_definition("app.ropeway.survivor.SurvivorStatus")
-            local danger_status = survivor_status_type:get_field("Danger"):get_data(nil)
-            local caution_status = survivor_status_type:get_field("Caution"):get_data(nil)
-            if new_life <= max * 0.25 then
-                params:call("setStatus", danger_status)
-            elseif new_life <= max * 0.5 then
-                params:call("setStatus", caution_status)
-            end
-        end
-    end)
-end
-
-function Effects.disarm()
-    log.info("[RE:Control] Effect: disarm")
-    local inventory = get_inventory()
-    if not inventory then return end
-    pcall(function()
-        local weapon = inventory:call("get_EquipItem") or inventory:call("get_EquipWeapon")
-        if weapon then
-            local bullets = weapon:call("get_Bullets") or weapon:call("get_Ammo")
-            if bullets then
-                bullets:call("set_Current", 0)
-                bullets:call("set_Num", 0)
-            end
-        end
-    end)
-end
-
-function Effects.care_package()
-    log.info("[RE:Control] Активирован эффект: care_package")
-    local inventory = get_inventory()
-    if not inventory then return end
-    pcall(function()
-        local item_type_def = sdk.find_type_definition("app.ropeway.ItemType")
-        local ammo_type = item_type_def:get_field("Ammo"):get_data(nil)
-        inventory:call("addItem", ammo_type, 30)
-    end)
-end
-
-function Effects.green_herb()
-    log.info("[RE:Control] Активирован эффект: green_herb")
-    local inventory = get_inventory()
-    if not inventory then return end
-    pcall(function()
-        local item_type_def = sdk.find_type_definition("app.ropeway.ItemType")
-        local herb_type = item_type_def:get_field("GreenHerb"):get_data(nil)
-        inventory:call("addItem", herb_type, 1)
-    end)
-end
-
-function Effects.mute_sound()
-    log.info("[RE:Control] Активирован эффект: mute_sound")
-    pcall(function()
-        local sm = sdk.get_managed_singleton("app.ropeway.SoundManager")
-        if sm then
-            sm:call("set_MasterVolume", 0.0)
-            sm:call("setMasterVolume", 0.0)
-            Effects.active_states.mute_sound = 10.0
-        end
-    end)
-end
-
-function Effects.hop()
-    log.info("[RE:Control] Effect: hop")
-    local go = get_player_gameobject()
-    if go then
-        local transform = go:call("get_Transform")
-        if transform then
-            local pos = transform:call("get_Position")
-            if pos then
-                pos.y = pos.y + 2.0
-                transform:call("set_Position", pos)
-            end
-        end
+-- 1. Полное лечение игрока (Спрей)
+function Effects.heal_full()
+    log.info("[RE:Control] Активирован эффект: heal_full")
+    local hp = get_hit_point_controller()
+    if hp then
+        local max_hp = hp:call("get_DefaultHitPoint") or 1200
+        hp:call("set_CurrentHitPoint", max_hp)
+        log.info("[RE:Control] heal_full: Здоровье восстановлено до максимума (" .. tostring(max_hp) .. ")")
+    else
+        log.error("[RE:Control] heal_full: HitPointController не найден!")
     end
 end
 
+-- 2. Малое лечение (Подорожник, +300 HP)
+function Effects.heal_small()
+    log.info("[RE:Control] Активирован эффект: heal_small")
+    local hp = get_hit_point_controller()
+    if hp then
+        local cur = hp:call("get_CurrentHitPoint") or 1200
+        local max_hp = hp:call("get_DefaultHitPoint") or 1200
+        local new_hp = math.min(max_hp, cur + 300)
+        hp:call("set_CurrentHitPoint", new_hp)
+        log.info("[RE:Control] heal_small: Здоровье увеличено с " .. tostring(cur) .. " до " .. tostring(new_hp))
+    else
+        log.error("[RE:Control] heal_small: HitPointController не найден!")
+    end
+end
+Effects.light_heal = Effects.heal_small
+Effects.green_herb = Effects.heal_small
+
+-- 3. Нанесение 50% урона (Удар ножом)
+function Effects.damage_half()
+    log.info("[RE:Control] Активирован эффект: damage_half")
+    local hp = get_hit_point_controller()
+    if hp then
+        local cur = hp:call("get_CurrentHitPoint") or 1200
+        local dmg = math.floor(cur * 0.5)
+        if dmg < 1 then dmg = 1 end
+        local new_hp = math.max(1, cur - dmg)
+        hp:call("set_CurrentHitPoint", new_hp)
+        log.info("[RE:Control] damage_half: Урон " .. tostring(dmg) .. ", осталось HP: " .. tostring(new_hp))
+    else
+        log.error("[RE:Control] damage_half: HitPointController не найден!")
+    end
+end
+
+-- 4. Царапина (-150 HP)
+function Effects.papercut()
+    log.info("[RE:Control] Активирован эффект: papercut")
+    local hp = get_hit_point_controller()
+    if hp then
+        local cur = hp:call("get_CurrentHitPoint") or 1200
+        local new_hp = math.max(1, cur - 150)
+        hp:call("set_CurrentHitPoint", new_hp)
+        log.info("[RE:Control] papercut: Легкий урон, осталось HP: " .. tostring(new_hp))
+    else
+        log.error("[RE:Control] papercut: HitPointController не найден!")
+    end
+end
+
+-- 5. Осечка (Патроны аккуратно ссыпаются в карман)
+function Effects.empty_ammo()
+    log.info("[RE:Control] Активирован эффект: empty_ammo")
+    local slot = get_main_slot()
+    if slot then
+        local current_bullets = slot:call("get_Number") or 0
+        local bullet_id = slot:call("get_BulletID")
+        if current_bullets > 0 then
+            add_bullets_to_inventory(bullet_id, current_bullets)
+            log.info("[RE:Control] empty_ammo: " .. tostring(current_bullets) .. " патронов возвращено в карман")
+        end
+        slot:call("set_Number", 0)
+        log.info("[RE:Control] empty_ammo: Магазин оружия опустошен (0 патронов)!")
+    else
+        log.error("[RE:Control] empty_ammo: MainSlot не найден!")
+    end
+end
+Effects.empty_mag = Effects.empty_ammo
+Effects.disarm = Effects.empty_ammo
+
+-- 6. Зарядка обоймы (Боекомплект)
+function Effects.refill_ammo()
+    log.info("[RE:Control] Активирован эффект: refill_ammo")
+    local slot = get_main_slot()
+    if slot then
+        local max_n = slot:call("get_MaxNumber")
+        if not max_n or max_n <= 0 then max_n = 15 end
+        slot:call("set_Number", max_n)
+        log.info("[RE:Control] refill_ammo: Магазин заполнен (" .. tostring(max_n) .. " патронов)!")
+    else
+        log.error("[RE:Control] refill_ammo: MainSlot не найден!")
+    end
+end
+Effects.care_package = Effects.refill_ammo
+Effects.give_grenade = Effects.refill_ammo
+
+-- 7. Бесконечные патроны на 15 секунд (Безлимит)
+function Effects.infinite_ammo()
+    log.info("[RE:Control] Активирован эффект: infinite_ammo")
+    Effects.refill_ammo()
+    Effects.active_states.infinite_ammo = 15.0
+end
+
+-- 8. Разворот строго на 180 градусов (Леон + Камера)
 function Effects.spin_180()
     log.info("[RE:Control] Effect: spin_180")
     local go = get_player_gameobject()
@@ -701,168 +207,337 @@ function Effects.spin_180()
         if transform then
             local rot = transform:call("get_Rotation")
             if rot then
-                rot.y = -rot.y
+                local x, y, z, w = rot.x, rot.y, rot.z, rot.w
+                rot.x = z
+                rot.y = w
+                rot.z = -x
+                rot.w = -y
                 transform:call("set_Rotation", rot)
+                log.info("[RE:Control] spin_180: Персонаж развернут ровно на 180°")
+            end
+        end
+    end
+    local cs = get_camera_system()
+    if cs then
+        pcall(function() cs:call("addAnglePlayerCamera", 3.14159265, 0.0) end)
+    end
+end
+
+-- 9. Отброс назад (push_back / Ветерок)
+function Effects.push_back()
+    log.info("[RE:Control] Активирован эффект: push_back")
+    local go = get_player_gameobject()
+    if go then
+        local transform = go:call("get_Transform")
+        if transform then
+            local pos = transform:call("get_Position")
+            local fwd = transform:call("get_AxisZ")
+            if pos and fwd then
+                pos.x = pos.x - fwd.x * 2.5
+                pos.z = pos.z - fwd.z * 2.5
+                transform:call("set_Position", pos)
+                log.info("[RE:Control] push_back: Игрок отброшен назад!")
             end
         end
     end
 end
 
+-- 10. Подскок (hop): 1.8 метра вверх на 1.2 секунды
+function Effects.hop()
+    log.info("[RE:Control] Effect: hop")
+    local go = get_player_gameobject()
+    if go then
+        local transform = go:call("get_Transform")
+        if transform then
+            local pos = transform:call("get_Position")
+            if pos and (Effects.active_states.hop_timer or 0) <= 0 then
+                pos.y = pos.y + 1.8
+                transform:call("set_Position", pos)
+                Effects.active_states.hop_height = 1.8
+                Effects.active_states.hop_timer = 1.2
+                log.info("[RE:Control] hop: Игрок подброшен на 1.8м в воздух на 1.2с!")
+            end
+        end
+    end
+end
+
+-- 11. Слепота (blackout) на 3 секунды
 function Effects.blackout()
     log.info("[RE:Control] Effect: blackout")
     Effects.active_states.blackout = 3.0
 end
 
+-- 12. Помехи (static_burst / VHS) на 2 секунды
 function Effects.static_burst()
     log.info("[RE:Control] Effect: static_burst")
     Effects.active_states.static_burst = 2.0
 end
+Effects.ui_wipe = Effects.static_burst
 
-function Effects.ui_wipe()
-    log.info("[RE:Control] Effect: ui_wipe")
-    Effects.active_states.ui_wipe = 15.0
-end
-
-function Effects.fake_mrx()
-    log.info("[RE:Control] Effect: fake_mrx")
-    local wwise = sdk.get_managed_singleton("via.wwise.WwiseManager")
-    if wwise then
-        pcall(function() 
-            wwise:call("triggerObjectSE", "se_em_tyrant_step", get_player_gameobject()) 
-        end)
+-- 13. Адреналин (Ускорение)
+function Effects.speed_up()
+    log.info("[RE:Control] Активирован эффект: speed_up")
+    if re.set_game_speed then
+        pcall(re.set_game_speed, 1.8)
     end
+    local sm_nat = sdk.get_native_singleton("via.SceneManager")
+    local sm_man = sdk.get_managed_singleton("via.SceneManager")
+    log.info("[RE:Control] speed_up: sm_nat=" .. tostring(sm_nat) .. ", sm_man=" .. tostring(sm_man))
+    if sm_nat then pcall(function() sm_nat:call("set_TimeScale", 1.8) end) end
+    if sm_man then pcall(function() sm_man:call("set_TimeScale", 1.8) end) end
+    local motion = get_player_motion()
+    if motion then pcall(function() motion:call("set_PlaySpeed", 2.0) end) end
+    Effects.active_states.speed_up = 8.0
+end
+Effects.auto_run = Effects.speed_up
+
+-- 14. Замедление (Slow Motion / Bullet Time)
+function Effects.slow_down()
+    log.info("[RE:Control] Активирован эффект: slow_down")
+    if re.set_game_speed then
+        pcall(re.set_game_speed, 0.4)
+    end
+    local sm_nat = sdk.get_native_singleton("via.SceneManager")
+    local sm_man = sdk.get_managed_singleton("via.SceneManager")
+    log.info("[RE:Control] slow_down: sm_nat=" .. tostring(sm_nat) .. ", sm_man=" .. tostring(sm_man))
+    if sm_nat then pcall(function() sm_nat:call("set_TimeScale", 0.4) end) end
+    if sm_man then pcall(function() sm_man:call("set_TimeScale", 0.4) end) end
+    local motion = get_player_motion()
+    if motion then pcall(function() motion:call("set_PlaySpeed", 0.4) end) end
+    Effects.active_states.slow_down = 8.0
 end
 
+-- 15. Заморозка (Freeze 4 секунды)
+function Effects.freeze()
+    log.info("[RE:Control] Активирован эффект: freeze")
+    if re.set_game_speed then
+        pcall(re.set_game_speed, 0.05)
+    end
+    local sm_nat = sdk.get_native_singleton("via.SceneManager")
+    local sm_man = sdk.get_managed_singleton("via.SceneManager")
+    if sm_nat then pcall(function() sm_nat:call("set_TimeScale", 0.05) end) end
+    if sm_man then pcall(function() sm_man:call("set_TimeScale", 0.05) end) end
+    local motion = get_player_motion()
+    if motion then pcall(function() motion:call("set_PlaySpeed", 0.0) end) end
+    Effects.active_states.freeze = 4.0
+end
+
+-- 16. Пьяная камера / Инверт
 function Effects.invert_controls()
     log.info("[RE:Control] Effect: invert_controls")
-    Effects.active_states.invert = 10.0
+    Effects.active_states.invert = 8.0
+end
+Effects.drunk_camera = Effects.invert_controls
+
+-- 17. Скример / Испуг (jumpscare)
+function Effects.jumpscare()
+    log.info("[RE:Control] Активирован эффект: jumpscare")
+    local cs = get_camera_system()
+    if cs then
+        pcall(function() cs:call("forceTwirlPlayerCamera", 15.0) end)
+    end
+    Effects.active_states.static_burst = 0.5
 end
 
-local function reset_speed()
-    local player = get_player()
-    if player then
+-- 18. Шаги Тирана (fake_mrx)
+function Effects.fake_mrx()
+    log.info("[RE:Control] Effect: fake_mrx")
+    local cs = get_camera_system()
+    if cs then
+        pcall(function() cs:call("forceTwirlPlayerCamera", 8.0) end)
+    end
+    Effects.active_states.static_burst = 0.2
+end
+
+-- 19. Клаустрофобия (FOV-)
+function Effects.fov_narrow()
+    log.info("[RE:Control] Effect: fov_narrow")
+    local cs = get_camera_system()
+    if cs then
         pcall(function()
-            local params = player:call("get_CharacterParameter") or player:call("get_CharacterStatus") or player:call("getCharacterParameters")
-            if params and Effects.active_states.orig_speed then 
-                params:call("set_MoveSpeedRate", Effects.active_states.orig_speed) 
-                params:call("setMoveSpeedRate", Effects.active_states.orig_speed) 
-            end
+            local cam = cs:call("get_MainCamera")
+            if cam then cam:call("set_Fov", 50.0) end
         end)
     end
+    Effects.active_states.fov_narrow = 8.0
 end
 
-local function reset_fov()
-    pcall(function()
-        local cm = sdk.get_managed_singleton("app.ropeway.CameraManager")
-        if cm then
-            local camera = cm:call("get_Camera") or cm:call("get_MainCamera")
-            if camera and Effects.active_states.orig_fov then 
-                camera:call("set_Fov", Effects.active_states.orig_fov) 
-                camera:call("setFov", Effects.active_states.orig_fov)
-            end
-        end
-    end)
+-- 20. Рыбий глаз (FOV+)
+function Effects.fov_wide()
+    log.info("[RE:Control] Effect: fov_wide")
+    local cs = get_camera_system()
+    if cs then
+        pcall(function()
+            local cam = cs:call("get_MainCamera")
+            if cam then cam:call("set_Fov", 110.0) end
+        end)
+    end
+    Effects.active_states.fov_wide = 8.0
 end
 
+-- 21. Спавны (атмосферные реакции)
+function Effects.spawn_zombie()
+    log.info("[RE:Control] Effect: spawn_zombie")
+    Effects.push_back()
+    Effects.active_states.static_burst = 0.3
+end
+
+function Effects.spawn_licker()
+    log.info("[RE:Control] Effect: spawn_licker")
+    Effects.hop()
+    Effects.jumpscare()
+end
+
+function Effects.spawn_dog()
+    log.info("[RE:Control] Effect: spawn_dog")
+    Effects.spin_180()
+end
+
+local last_frame_clock = os.clock()
+
+local function get_safe_delta()
+    local now = os.clock()
+    local dt = now - last_frame_clock
+    last_frame_clock = now
+    if dt <= 0 or dt > 0.5 then
+        dt = 0.0166
+    end
+    return dt
+end
+
+-- Главный покадровый цикл
 re.on_frame(function()
-    local delta = re.get_delta_time()
-    
-    if Effects.active_states.auto_run > 0 then
-        Effects.active_states.auto_run = Effects.active_states.auto_run - delta
-        if Effects.active_states.auto_run <= 0 then
-            reset_speed()
+    local delta = get_safe_delta()
+
+    -- 1. Бесконечные патроны
+    if Effects.active_states.infinite_ammo > 0 then
+        Effects.active_states.infinite_ammo = Effects.active_states.infinite_ammo - delta
+        local slot = get_main_slot()
+        if slot then
+            local max_n = slot:call("get_MaxNumber") or 15
+            slot:call("set_Number", max_n)
         end
     end
-    
+
+    -- 2. Приземление после подскока (hop)
+    if (Effects.active_states.hop_timer or 0) > 0 then
+        Effects.active_states.hop_timer = Effects.active_states.hop_timer - delta
+        if Effects.active_states.hop_timer <= 0 then
+            local go = get_player_gameobject()
+            if go and (Effects.active_states.hop_height or 0) > 0 then
+                local transform = go:call("get_Transform")
+                if transform then
+                    local pos = transform:call("get_Position")
+                    if pos then
+                        pos.y = pos.y - Effects.active_states.hop_height
+                        transform:call("set_Position", pos)
+                        log.info("[RE:Control] hop: Персонаж успешно приземлился на пол!")
+                    end
+                end
+                Effects.active_states.hop_height = 0
+            end
+        end
+    end
+
+    -- 3. Восстановление скорости времени (speed_up, slow_down, freeze)
     if Effects.active_states.speed_up > 0 then
         Effects.active_states.speed_up = Effects.active_states.speed_up - delta
         if Effects.active_states.speed_up <= 0 then
-            reset_speed()
-        end
-    end
-    
-    if Effects.active_states.slow_down > 0 then
-        Effects.active_states.slow_down = Effects.active_states.slow_down - delta
-        if Effects.active_states.slow_down <= 0 then
-            reset_speed()
-        end
-    end
-    
-    if Effects.active_states.freeze > 0 then
-        Effects.active_states.freeze = Effects.active_states.freeze - delta
-        if Effects.active_states.freeze <= 0 then
-            reset_speed()
+            if re.set_game_speed then pcall(re.set_game_speed, 1.0) end
+            local sm_nat = sdk.get_native_singleton("via.SceneManager")
+            if sm_nat then pcall(function() sm_nat:call("set_TimeScale", 1.0) end) end
+            local sm_man = sdk.get_managed_singleton("via.SceneManager")
+            if sm_man then pcall(function() sm_man:call("set_TimeScale", 1.0) end) end
+            local motion = get_player_motion()
+            if motion then pcall(function() motion:call("set_PlaySpeed", 1.0) end) end
+            log.info("[RE:Control] speed_up завершен, скорость восстановлена")
         end
     end
 
+    if Effects.active_states.slow_down > 0 then
+        Effects.active_states.slow_down = Effects.active_states.slow_down - delta
+        if Effects.active_states.slow_down <= 0 then
+            if re.set_game_speed then pcall(re.set_game_speed, 1.0) end
+            local sm_nat = sdk.get_native_singleton("via.SceneManager")
+            if sm_nat then pcall(function() sm_nat:call("set_TimeScale", 1.0) end) end
+            local sm_man = sdk.get_managed_singleton("via.SceneManager")
+            if sm_man then pcall(function() sm_man:call("set_TimeScale", 1.0) end) end
+            local motion = get_player_motion()
+            if motion then pcall(function() motion:call("set_PlaySpeed", 1.0) end) end
+            log.info("[RE:Control] slow_down завершен, скорость восстановлена")
+        end
+    end
+
+    if Effects.active_states.freeze > 0 then
+        Effects.active_states.freeze = Effects.active_states.freeze - delta
+        if Effects.active_states.freeze <= 0 then
+            if re.set_game_speed then pcall(re.set_game_speed, 1.0) end
+            local sm_nat = sdk.get_native_singleton("via.SceneManager")
+            if sm_nat then pcall(function() sm_nat:call("set_TimeScale", 1.0) end) end
+            local sm_man = sdk.get_managed_singleton("via.SceneManager")
+            if sm_man then pcall(function() sm_man:call("set_TimeScale", 1.0) end) end
+            local motion = get_player_motion()
+            if motion then pcall(function() motion:call("set_PlaySpeed", 1.0) end) end
+            log.info("[RE:Control] freeze завершен, скорость восстановлена")
+        end
+    end
+
+    -- 4. Восстановление FOV
     if Effects.active_states.fov_narrow > 0 then
         Effects.active_states.fov_narrow = Effects.active_states.fov_narrow - delta
         if Effects.active_states.fov_narrow <= 0 then
-            reset_fov()
-        end
-    end
-    
-    if Effects.active_states.fov_wide > 0 then
-        Effects.active_states.fov_wide = Effects.active_states.fov_wide - delta
-        if Effects.active_states.fov_wide <= 0 then
-            reset_fov()
-        end
-    end
-    
-    if Effects.active_states.mute_sound > 0 then
-        Effects.active_states.mute_sound = Effects.active_states.mute_sound - delta
-        if Effects.active_states.mute_sound <= 0 then
-            pcall(function()
-                local sm = sdk.get_managed_singleton("app.ropeway.SoundManager")
-                if sm then
-                    sm:call("set_MasterVolume", 1.0)
-                    sm:call("setMasterVolume", 1.0)
-                end
-            end)
-        end
-    end
-    
-    if Effects.active_states.big_head > 0 then
-        Effects.active_states.big_head = Effects.active_states.big_head - delta
-        if Effects.active_states.big_head <= 0 then
-            local player = get_player()
-            if player then
+            local cs = get_camera_system()
+            if cs then
                 pcall(function()
-                    local transform = player:call("get_Transform")
-                    if transform then
-                        local head_joint = transform:call("getJointByName", "Head") or transform:call("getJointByName", "head")
-                        if head_joint then
-                            local scale = head_joint:call("get_LocalScale") or head_joint:call("getLocalScale")
-                            if scale then
-                                scale.x, scale.y, scale.z = 1.0, 1.0, 1.0
-                                head_joint:call("set_LocalScale", scale)
-                                head_joint:call("setLocalScale", scale)
-                            end
-                        end
-                    end
+                    local cam = cs:call("get_MainCamera")
+                    if cam then cam:call("set_Fov", 80.0) end
                 end)
             end
         end
     end
-end)
 
-re.on_draw_ui(function()
-    local screen_w = 1920
-    local screen_h = 1080
+    if Effects.active_states.fov_wide > 0 then
+        Effects.active_states.fov_wide = Effects.active_states.fov_wide - delta
+        if Effects.active_states.fov_wide <= 0 then
+            local cs = get_camera_system()
+            if cs then
+                pcall(function()
+                    local cam = cs:call("get_MainCamera")
+                    if cam then cam:call("set_Fov", 80.0) end
+                end)
+            end
+        end
+    end
 
+    -- 5. Мягкое покачивание камеры при инверте (пьяный прицел)
+    if Effects.active_states.invert > 0 then
+        Effects.active_states.invert = Effects.active_states.invert - delta
+        local cs = get_camera_system()
+        if cs then
+            local sway_yaw = math.sin(os.clock() * 3.5) * 0.02
+            local sway_pitch = math.cos(os.clock() * 2.5) * 0.015
+            pcall(function() cs:call("addAnglePlayerCamera", sway_yaw, sway_pitch) end)
+        end
+    end
+
+    -- 6. Графические эффекты (Blackout & Static)
     if Effects.active_states.blackout > 0 then
-        Effects.active_states.blackout = Effects.active_states.blackout - re.get_delta_time()
-        d2d.fill_rect(0, 0, screen_w, screen_h, 0xFF000000)
+        Effects.active_states.blackout = Effects.active_states.blackout - delta
+        if draw and draw.filled_rect then
+            draw.filled_rect(0, 0, 3840, 2160, 0xFF000000)
+        end
     end
 
     if Effects.active_states.static_burst > 0 then
-        Effects.active_states.static_burst = Effects.active_states.static_burst - re.get_delta_time()
-        for i = 1, 50 do
-            local x = math.random(0, screen_w)
-            local y = math.random(0, screen_h)
-            local w = math.random(10, 300)
-            local h = math.random(5, 50)
-            d2d.fill_rect(x, y, w, h, 0x88AAAAAA)
+        Effects.active_states.static_burst = Effects.active_states.static_burst - delta
+        if draw and draw.filled_rect then
+            for i = 1, 35 do
+                local rx = math.random(0, 1920)
+                local ry = math.random(0, 1080)
+                local rw = math.random(60, 600)
+                local rh = math.random(10, 80)
+                draw.filled_rect(rx, ry, rw, rh, 0xCCAAAAAA)
+            end
         end
     end
 end)

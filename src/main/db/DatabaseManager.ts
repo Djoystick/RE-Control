@@ -29,16 +29,17 @@ export class DatabaseManager {
         }
     }
 
-    addVote(username: string, effectId: string) {
+    addVote(username: string, effectId: string, category: string = 'positive') {
         if (!this.db) return;
         try {
+            const karmaDelta = category === 'positive' ? 1 : -1;
             const stmt = this.db.prepare(`
                 INSERT INTO viewers (username, karma)
-                VALUES (?, 1)
-                ON CONFLICT(username) DO UPDATE SET karma = karma + 1
+                VALUES (?, ?)
+                ON CONFLICT(username) DO UPDATE SET karma = karma + ?
             `);
-            stmt.run(username);
-            sysLogger.info(`Added karma to ${username} for voting on ${effectId}`);
+            stmt.run(username, karmaDelta, karmaDelta);
+            sysLogger.info(`Updated karma (${karmaDelta > 0 ? '+' : ''}${karmaDelta}) for ${username} [${effectId}]`);
         } catch (error) {
             sysLogger.error('Failed to add vote to db: ' + error);
         }
