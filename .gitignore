@@ -27,7 +27,12 @@ assets/audio/
 # Backups & Temporary Probes
 *.bak*
 *.backup
+*.tsbuildinfo
 test_dump.lua
 merge_*.py
 old_effects.lua
+eslint_output.txt
+fix_*.js
+append_sim.js
+categorize.js
 
