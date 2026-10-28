@@ -1,5 +1,4 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
 
 const api = {
   startSimulator: () => ipcRenderer.send('simulator:start'),
@@ -60,6 +59,7 @@ const api = {
   saveTwitchAuth: (username: string, token: string, channel: string) => ipcRenderer.invoke('settings:saveTwitchAuth', { username, token, channel }),
   getTwitchAuth: () => ipcRenderer.invoke('settings:getTwitchAuth'),
   validateTwitchToken: (token: string) => ipcRenderer.invoke('twitch:validateToken', token),
+  sendTwitchTestPing: (channel?: string) => ipcRenderer.invoke('twitch:sendTestPing', channel),
 
   // Setup Wizard API
   getGames: () => ipcRenderer.invoke('setup:getGames'),
@@ -83,28 +83,27 @@ const api = {
   getVolume: () => ipcRenderer.invoke('settings:getVolume'),
   setVolume: (volume: number) => ipcRenderer.invoke('settings:setVolume', volume),
   getObsStatus: () => ipcRenderer.invoke('obs:getStatus'),
+  getOverlayUrl: () => ipcRenderer.invoke('obs:getOverlayUrl'),
   onObsStatus: (cb: (data: { connected: boolean; count: number }) => void) => {
     const handler = (_: any, d: any) => cb(d)
     ipcRenderer.on('obs:status', handler)
     return () => ipcRenderer.removeListener('obs:status', handler)
   },
-  getRemoteInfo: () => ipcRenderer.invoke('remote:getInfo'),
-  triggerEffect: (effectId: string) => ipcRenderer.invoke('remote:triggerEffect', effectId)
-}
-
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
+    getRemoteInfo: () => ipcRenderer.invoke('remote:getInfo'),
+    triggerEffect: (effectId: string) => ipcRenderer.invoke('remote:triggerEffect', effectId),
+    versions: process.versions
   }
-} else {
-  // @ts-ignore
-  window.electron = electronAPI
-  // @ts-ignore
-  window.api = api
-}
+
+  if (process.contextIsolated) {
+    try {
+      contextBridge.exposeInMainWorld('api', api)
+    } catch (error) {
+      console.error(error)
+    }
+  } else {
+    // @ts-ignore
+    window.api = api
+  }
 
 
 

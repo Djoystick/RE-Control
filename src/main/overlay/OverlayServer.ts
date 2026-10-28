@@ -1,5 +1,8 @@
 import http from 'http';
+import fs from 'fs';
+import path from 'path';
 import os from 'os';
+import crypto from 'crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { EventEmitter } from 'events';
 import QRCode from 'qrcode';
@@ -41,10 +44,87 @@ export class OverlayServer extends EventEmitter {
     private wss: WebSocketServer | null = null;
     private port: number = 27016;
     private clients: Set<WebSocket> = new Set();
+    private authToken: string = crypto.randomBytes(16).toString('hex');
+    private triggerRateMap: Map<string, { count: number; resetAt: number }> = new Map();
+    public static readonly MAX_BODY_BYTES = 64 * 1024; // 64 KB
+    public static readonly MAX_WS_CLIENTS = 16;
 
     constructor() {
         super();
         this.initServer();
+    }
+
+    public getAuthToken(): string {
+        return this.authToken;
+    }
+
+    private isAuthorized(req: http.IncomingMessage, parsedUrl: URL): boolean {
+        const authHeader = req.headers['authorization'];
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.slice(7).trim();
+            if (token === this.authToken) return true;
+        }
+        const queryToken = parsedUrl.searchParams.get('token');
+        if (queryToken && queryToken === this.authToken) {
+            return true;
+        }
+        return false;
+    }
+
+    private readJsonBody(req: http.IncomingMessage, res: http.ServerResponse, maxBytes: number = OverlayServer.MAX_BODY_BYTES): Promise<any | null> {
+        return new Promise((resolve) => {
+            let body = '';
+            let bytesReceived = 0;
+            let tooLarge = false;
+
+            req.on('data', chunk => {
+                if (tooLarge) return;
+                bytesReceived += chunk.length;
+                if (bytesReceived > maxBytes) {
+                    tooLarge = true;
+                    res.writeHead(413, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Payload Too Large: Maximum 64KB allowed' }));
+                    req.destroy();
+                    resolve(null);
+                    return;
+                }
+                body += chunk;
+            });
+
+            req.on('end', () => {
+                if (tooLarge) return;
+                try {
+                    const data = JSON.parse(body || '{}');
+                    resolve(data);
+                } catch (err: any) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Invalid JSON body: ' + err.message }));
+                    resolve(null);
+                }
+            });
+
+            req.on('error', (err) => {
+                if (!tooLarge && !res.headersSent) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: err.message }));
+                }
+                resolve(null);
+            });
+        });
+    }
+
+    private isRateLimited(key: string, limit: number = 10, windowMs: number = 1000): boolean {
+        const now = Date.now();
+        const entry = this.triggerRateMap.get(key);
+        if (!entry || now > entry.resetAt) {
+            this.triggerRateMap.set(key, { count: 1, resetAt: now + windowMs });
+            return false;
+        }
+        if (entry.count >= limit) {
+            return true;
+        }
+        entry.count++;
+        return false;
     }
 
     private initServer() {
@@ -52,10 +132,18 @@ export class OverlayServer extends EventEmitter {
             this.httpServer = http.createServer(async (req, res) => {
                 sysLogger.info(`[HTTP] ${req.method} ${req.url} (Host: ${req.headers.host || 'none'}) from ${req.socket?.remoteAddress}`);
                 try {
-                    // Enable CORS
-                    res.setHeader('Access-Control-Allow-Origin', '*');
-                    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-                    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+                    // Safe CORS: Only reflect local / LAN origin
+                    const origin = req.headers.origin;
+                    if (origin) {
+                        const isLocalOrigin = origin.startsWith('http://localhost') || 
+                                              origin.startsWith('http://127.0.0.1') || 
+                                              origin.startsWith(`http://${getLocalIp()}`);
+                        if (isLocalOrigin) {
+                            res.setHeader('Access-Control-Allow-Origin', origin);
+                            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+                            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+                        }
+                    }
 
                     if (req.method === 'OPTIONS') {
                         res.writeHead(204);
@@ -64,7 +152,14 @@ export class OverlayServer extends EventEmitter {
                     }
 
                     const rawUrl = req.url || '/';
-                    const pathname = (rawUrl.split('?')[0] || '/').replace(/\/+$/, '') || '/';
+                    const hostHeader = req.headers.host || 'localhost';
+                    let parsedUrl: URL;
+                    try {
+                        parsedUrl = new URL(rawUrl, `http://${hostHeader}`);
+                    } catch {
+                        parsedUrl = new URL('/', `http://${hostHeader}`);
+                    }
+                    const pathname = (parsedUrl.pathname || '/').replace(/\/+$/, '') || '/';
 
                     // API: Status
                     if (pathname === '/api/status' && req.method === 'GET') {
@@ -78,10 +173,10 @@ export class OverlayServer extends EventEmitter {
                         return;
                     }
 
-                    // API: QR Code data URL
+                    // API: QR Code data URL (encodes token in URL)
                     if (pathname === '/api/qr' && req.method === 'GET') {
                         try {
-                            const targetUrl = `http://${getLocalIp()}:${this.port}/remote`;
+                            const targetUrl = this.getLocalUrl();
                             const qrDataUrl = await QRCode.toDataURL(targetUrl, {
                                 margin: 1,
                                 width: 256,
@@ -96,56 +191,126 @@ export class OverlayServer extends EventEmitter {
                         return;
                     }
 
-                    // API: Trigger effect directly from mobile phone
+                    // API: Trigger effect directly from mobile phone (Requires Token Auth & Rate Limit)
                     if (pathname === '/api/trigger' && req.method === 'POST') {
-                        let body = '';
-                        req.on('data', chunk => { body += chunk; });
-                        req.on('end', () => {
-                            try {
-                                const data = JSON.parse(body || '{}');
-                                const effectId = data.effectId;
-                                if (!effectId) {
-                                    res.writeHead(400, { 'Content-Type': 'application/json' });
-                                    res.end(JSON.stringify({ error: 'effectId is required' }));
-                                    return;
-                                }
-                                sysLogger.info(`[WebRemote] Triggering effect: ${effectId}`);
-                                this.emit('effect:trigger', effectId);
-                                res.writeHead(200, { 'Content-Type': 'application/json' });
-                                res.end(JSON.stringify({ success: true, effectId }));
-                            } catch (err: any) {
-                                res.writeHead(400, { 'Content-Type': 'application/json' });
-                                res.end(JSON.stringify({ error: err.message }));
-                            }
-                        });
+                        if (!this.isAuthorized(req, parsedUrl)) {
+                            sysLogger.warn(`[OverlayServer] Unauthorized trigger attempt from ${req.socket?.remoteAddress}`);
+                            res.writeHead(401, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ error: 'Unauthorized: Invalid or missing token' }));
+                            return;
+                        }
+
+                        const clientIp = req.socket?.remoteAddress || 'unknown';
+                        if (this.isRateLimited(clientIp, 10, 1000)) {
+                            sysLogger.warn(`[OverlayServer] Rate limit exceeded for ${clientIp} on /api/trigger`);
+                            res.writeHead(429, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ error: 'Too Many Requests: Rate limit exceeded (10 req/s)' }));
+                            return;
+                        }
+
+                        const data = await this.readJsonBody(req, res);
+                        if (!data) return;
+
+                        const effectId = data.effectId;
+                        if (!effectId) {
+                            res.writeHead(400, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ error: 'effectId is required' }));
+                            return;
+                        }
+                        sysLogger.info(`[WebRemote] Triggering effect: ${effectId}`);
+                        this.emit('effect:trigger', effectId);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true, effectId }));
                         return;
                     }
 
-                    // API: Vote actions (Start / Stop / Intervention)
+                    // API: Vote actions (Start / Stop / Intervention) (Requires Token Auth)
                     if (pathname === '/api/vote' && req.method === 'POST') {
-                        let body = '';
-                        req.on('data', chunk => { body += chunk; });
-                        req.on('end', () => {
-                            try {
-                                const data = JSON.parse(body || '{}');
-                                const action = data.action;
-                                sysLogger.info(`[WebRemote] Vote action: ${action}`);
-                                this.emit('vote:action', action);
-                                res.writeHead(200, { 'Content-Type': 'application/json' });
-                                res.end(JSON.stringify({ success: true, action }));
-                            } catch (err: any) {
-                                res.writeHead(400, { 'Content-Type': 'application/json' });
-                                res.end(JSON.stringify({ error: err.message }));
-                            }
-                        });
+                        if (!this.isAuthorized(req, parsedUrl)) {
+                            sysLogger.warn(`[OverlayServer] Unauthorized vote attempt from ${req.socket?.remoteAddress}`);
+                            res.writeHead(401, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ error: 'Unauthorized: Invalid or missing token' }));
+                            return;
+                        }
+
+                        const data = await this.readJsonBody(req, res);
+                        if (!data) return;
+
+                        const action = data.action;
+                        sysLogger.info(`[WebRemote] Vote action: ${action}`);
+                        this.emit('vote:action', action);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true, action }));
                         return;
                     }
 
                     // Web Remote Mobile HTML page (supports /remote, /remote/, /)
                     if (pathname === '/remote' || pathname === '/') {
+                        if (!this.isAuthorized(req, parsedUrl)) {
+                            res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
+                            res.end(`<!DOCTYPE html><html><body style="background:#0a0c10;color:#ef4444;font-family:sans-serif;text-align:center;padding:50px;"><h2>Доступ запрещен (401 Unauthorized)</h2><p style="color:#94a3b8;">Для доступа к пульту Stream Deck отсканируйте актуальный QR-код в приложении RE:Control на ПК.</p></body></html>`);
+                            return;
+                        }
                         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-                        res.end(this.getMobileRemoteHtml());
+                        res.end(this.getMobileRemoteHtml(this.authToken));
                         return;
+                    }
+
+                    // OBS Studio Overlay (supports /overlay and /overlay.html)
+                    if (pathname === '/overlay' || pathname === '/overlay.html') {
+                        if (process.env['ELECTRON_RENDERER_URL']) {
+                            res.writeHead(302, { 'Location': `${process.env['ELECTRON_RENDERER_URL']}/overlay.html` });
+                            res.end();
+                            return;
+                        }
+
+                        const possibleOverlayPaths = [
+                            path.resolve(__dirname, '../renderer/overlay.html'),
+                            path.resolve(__dirname, '../../out/renderer/overlay.html'),
+                            path.resolve(__dirname, '../../../out/renderer/overlay.html'),
+                            path.resolve(process.cwd(), 'out/renderer/overlay.html')
+                        ];
+                        const overlayPath = possibleOverlayPaths.find(p => fs.existsSync(p));
+                        if (overlayPath) {
+                            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                            res.end(fs.readFileSync(overlayPath));
+                            return;
+                        }
+                        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                        res.end('Overlay build not found. Run npm run build.');
+                        return;
+                    }
+
+                    // Static assets for overlay (/assets/*)
+                    if (pathname && pathname.startsWith('/assets/')) {
+                        const possibleAssetBases = [
+                            path.resolve(__dirname, '../renderer/assets'),
+                            path.resolve(__dirname, '../../out/renderer/assets'),
+                            path.resolve(__dirname, '../../../out/renderer/assets'),
+                            path.resolve(process.cwd(), 'out/renderer/assets')
+                        ];
+                        const assetsBase = possibleAssetBases.find(p => fs.existsSync(p));
+                        if (assetsBase) {
+                            const assetRel = pathname.replace(/^\/assets\//, '');
+                            const assetPath = path.resolve(assetsBase, assetRel);
+                            if (assetPath.startsWith(assetsBase) && fs.existsSync(assetPath)) {
+                                const ext = path.extname(assetPath).toLowerCase();
+                                const mimeTypes: Record<string, string> = {
+                                    '.js': 'text/javascript; charset=utf-8',
+                                    '.css': 'text/css; charset=utf-8',
+                                    '.json': 'application/json; charset=utf-8',
+                                    '.png': 'image/png',
+                                    '.jpg': 'image/jpeg',
+                                    '.svg': 'image/svg+xml',
+                                    '.ico': 'image/x-icon',
+                                    '.woff': 'font/woff',
+                                    '.woff2': 'font/woff2'
+                                };
+                                res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+                                res.end(fs.readFileSync(assetPath));
+                                return;
+                            }
+                        }
                     }
 
                     res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -187,7 +352,31 @@ export class OverlayServer extends EventEmitter {
                 clearInterval(interval);
             });
 
-            this.wss.on('connection', (ws: WebSocket) => {
+            this.wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
+                if (this.clients.size >= OverlayServer.MAX_WS_CLIENTS) {
+                    sysLogger.warn(`[OverlayServer] WS connection rejected: max ${OverlayServer.MAX_WS_CLIENTS} clients reached`);
+                    ws.close(4008, 'Max clients reached');
+                    return;
+                }
+
+                const remoteAddr = req.socket?.remoteAddress || '';
+                const isLocal = remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1';
+
+                if (!isLocal) {
+                    let token = '';
+                    try {
+                        const host = req.headers.host || 'localhost';
+                        const parsedUrl = new URL(req.url || '/', `http://${host}`);
+                        token = parsedUrl.searchParams.get('token') || '';
+                    } catch {}
+
+                    if (token !== this.authToken) {
+                        sysLogger.warn(`[OverlayServer] WS unauthorized connection attempt from ${remoteAddr}`);
+                        ws.close(4001, 'Unauthorized');
+                        return;
+                    }
+                }
+
                 const extWs = ws as any;
                 extWs.isAlive = true;
                 ws.on('pong', () => {
@@ -228,12 +417,33 @@ export class OverlayServer extends EventEmitter {
         }
     }
 
+    public stop() {
+        if (this.wss) {
+            try {
+                this.wss.close();
+            } catch (e) {
+                sysLogger.warn('[OverlayServer] Error closing WebSocket server: ' + e);
+            }
+        }
+        if (this.httpServer) {
+            try {
+                this.httpServer.close();
+            } catch (e) {
+                sysLogger.warn('[OverlayServer] Error closing HTTP server: ' + e);
+            }
+        }
+    }
+
     public getClientCount(): number {
         return this.clients.size;
     }
 
     public getLocalUrl(): string {
-        return `http://${getLocalIp()}:${this.port}/remote`;
+        return `http://${getLocalIp()}:${this.port}/remote?token=${this.authToken}`;
+    }
+
+    public getOverlayUrl(): string {
+        return `http://localhost:${this.port}/overlay?token=${this.authToken}`;
     }
 
     public async getQrCode(): Promise<string> {
@@ -249,12 +459,16 @@ export class OverlayServer extends EventEmitter {
         const payload = JSON.stringify({ type, data });
         for (const client of this.clients) {
             if (client.readyState === WebSocket.OPEN) {
+                if (client.bufferedAmount > 64 * 1024) {
+                    sysLogger.warn(`[OverlayServer] WS client buffer overflow (${client.bufferedAmount} bytes). Dropping frame.`);
+                    continue;
+                }
                 client.send(payload);
             }
         }
     }
 
-    private getMobileRemoteHtml(): string {
+    private getMobileRemoteHtml(token: string): string {
         return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -607,6 +821,7 @@ export class OverlayServer extends EventEmitter {
     <div id="toast">✅ Эффект отправлен!</div>
 
     <script>
+        const AUTH_TOKEN = ${JSON.stringify(token)};
         let toastTimeout = null;
 
         function showToast(msg) {
@@ -629,7 +844,10 @@ export class OverlayServer extends EventEmitter {
             try {
                 const res = await fetch('/api/trigger', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + AUTH_TOKEN
+                    },
                     body: JSON.stringify({ effectId })
                 });
                 const data = await res.json();
@@ -648,7 +866,10 @@ export class OverlayServer extends EventEmitter {
             try {
                 const res = await fetch('/api/vote', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + AUTH_TOKEN
+                    },
                     body: JSON.stringify({ action })
                 });
                 showToast('🚀 Действие [' + action + '] выполнено!');

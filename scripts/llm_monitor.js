@@ -1,5 +1,14 @@
-﻿// LLM Monitor — радар бесплатных моделей OpenRouter
+// LLM Monitor — радар бесплатных моделей OpenRouter
 // Запуск: OPENROUTER_API_KEY="sk-or-v1-..." node scripts/llm_monitor.js
+
+import { ProxyAgent, setGlobalDispatcher } from 'undici';
+
+const PROXY_URL = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || 'http://127.0.0.1:2080';
+try {
+  setGlobalDispatcher(new ProxyAgent(PROXY_URL));
+} catch (e) {
+  // ignore if proxy unavailable
+}
 
 const API_KEY = process.env.OPENROUTER_API_KEY;
 

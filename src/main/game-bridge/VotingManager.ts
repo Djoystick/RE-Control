@@ -8,6 +8,8 @@ export interface VoteOption {
     effectId: string;
     displayName: string;
     votes: number;
+    category?: string;
+    isMega?: boolean;
 }
 
 export interface VoteState {
@@ -26,6 +28,7 @@ export class VotingManager extends EventEmitter {
     private isActive: boolean = false;
     private timer: ReturnType<typeof setInterval> | null = null;
     private cooldownTimer: NodeJS.Timeout | null = null;
+    private donationRestartTimer: NodeJS.Timeout | null = null;
     private timeRemainingMs: number = 0;
     private lastVotedOptionId: number | null = null;
     private consecutiveVotesCount: number = 0;
@@ -33,8 +36,8 @@ export class VotingManager extends EventEmitter {
     private readonly VOTE_DURATION_MS = 60000; // 60 seconds to vote
     private COOLDOWN_DURATION_MS = 600000; // 10 minutes cooldown (Marathon pacing default)
     
-    // The current pool of active effects
-        private effectPool = [
+    // The current pool of active verified effects
+    private effectPool = [
         // Positive
         { id: 'light_heal', name: 'Подорожник (Лечение 15%)', category: 'positive' },
         { id: 'speed_up', name: 'Адреналин (Ускорение)', category: 'positive' },
@@ -56,15 +59,15 @@ export class VotingManager extends EventEmitter {
         { id: 'fov_wide', name: 'Рыбий глаз (FOV+)', category: 'psychological' },
         { id: 'camera_shake', name: 'Паническая атака', category: 'psychological' },
         { id: 'ui_wipe', name: 'Где мои очки? (UI Off)', category: 'psychological' },
-        { id: 'mirror_screen', name: 'Зеркало (Отзеркаливание)', category: 'psychological' },
         { id: 'static_burst', name: 'Помехи экрана (2с)', category: 'psychological' },
         { id: 'invert_controls', name: 'Пьяный геймпад (10с)', category: 'psychological' },
         { id: 'blackout', name: 'Вырубили свет (3с)', category: 'psychological' },
-        { id: 'mute_sound', name: 'Немой режим (Без звука)', category: 'psychological' },
         { id: 'fake_mrx', name: 'Свой среди чужих (Шаги Тирана)', category: 'psychological' }
     ];
 
     private activeTrustedUsers = new Map<string, number>();
+    // One viewer = one vote; a new digit from the same viewer moves their vote
+    private voterChoices = new Map<string, number>();
     private traitorState: { active: boolean, username: string | null, options: any[], timer: NodeJS.Timeout | null } = { active: false, username: null, options: [], timer: null };
 
     constructor() {
@@ -101,6 +104,7 @@ export class VotingManager extends EventEmitter {
         this.timeRemainingMs = this.VOTE_DURATION_MS;
         this.lastVotedOptionId = null;
         this.consecutiveVotesCount = 0;
+        this.voterChoices.clear();
         
         // Pick 3 random options
         const posPool = this.effectPool.filter(e => e.category === 'positive');
@@ -130,7 +134,8 @@ export class VotingManager extends EventEmitter {
             id: index + 1,
             effectId: effect.id,
             displayName: effect.name,
-            votes: 0
+            votes: 0,
+            category: effect.category
         }));
 
         sysLogger.info('Started new voting cycle. Options:', this.options.map(o => o.displayName));
@@ -204,9 +209,8 @@ export class VotingManager extends EventEmitter {
         if (this.traitorState.active) {
             if (cmd.username.toLowerCase() === this.traitorState.username?.toLowerCase()) {
                 const voteText = cmd.command.trim();
-                const voteId = parseInt(voteText, 10);
-                
-                if (!isNaN(voteId)) {
+                if (/^[1-5]$/.test(voteText)) {
+                    const voteId = parseInt(voteText, 10);
                     const option = this.traitorState.options.find(opt => opt.id === voteId);
                     if (option) {
                         this.emit('traitor:effect', option.effectId);
@@ -219,20 +223,27 @@ export class VotingManager extends EventEmitter {
 
         if (!this.isActive) return;
         
-        // Very simple vote parsing: if they just type "1", "2", or "3"
+        // Strict vote parsing: only "1", "2", or "3"
         const voteText = cmd.command.trim();
-        const voteId = parseInt(voteText, 10);
-        
-        if (!isNaN(voteId)) {
+        if (/^[1-3]$/.test(voteText)) {
+            const voteId = parseInt(voteText, 10);
             const option = this.options.find(opt => opt.id === voteId);
             if (option) {
+                // Move the viewer's existing vote instead of stacking a new one
+                const previousChoice = this.voterChoices.get(cmd.username);
+                if (previousChoice === option.id) return;
+                if (previousChoice !== undefined) {
+                    const previousOption = this.options.find(opt => opt.id === previousChoice);
+                    if (previousOption && previousOption.votes > 0) previousOption.votes--;
+                }
+                this.voterChoices.set(cmd.username, option.id);
                 option.votes++;
 
                 // Track MEGA combo (5 in a row for the same option)
                 if (this.lastVotedOptionId === option.id) {
                     this.consecutiveVotesCount++;
-                    if (this.consecutiveVotesCount >= 5 && !(option as any).isMega) {
-                        (option as any).isMega = true;
+                    if (this.consecutiveVotesCount >= 5 && !option.isMega) {
+                        option.isMega = true;
                         sysLogger.info(`🔥 MEGA STATUS UNLOCKED for [${option.displayName}] (5 consecutive votes)!`);
                     }
                 } else {
@@ -240,10 +251,12 @@ export class VotingManager extends EventEmitter {
                     this.consecutiveVotesCount = 1;
                 }
 
-                // Add karma based on effect category
-                const effectDef = this.effectPool.find(e => e.id === option.effectId);
-                const category = effectDef?.category || 'positive';
-                dbManager.addVote(cmd.username, option.effectId, category);
+                // Add karma based on effect category (first vote of the round only)
+                if (previousChoice === undefined) {
+                    const effectDef = this.effectPool.find(e => e.id === option.effectId);
+                    const category = effectDef?.category || option.category || 'positive';
+                    dbManager.addVote(cmd.username, option.effectId, category);
+                }
                 
                 this.emit('vote:update', this.getState());
             }
@@ -268,7 +281,7 @@ export class VotingManager extends EventEmitter {
 
         sysLogger.info('Voting ended. Winner: ' + winner.displayName + ' with ' + winner.votes + ' votes.');
         
-        if ((winner as any).isMega) {
+        if (winner.isMega) {
             winner.effectId = 'MEGA_' + winner.effectId;
         }
         this.emit('vote:end', { winner, state: this.getState() });
@@ -279,12 +292,14 @@ export class VotingManager extends EventEmitter {
         }, this.COOLDOWN_DURATION_MS);
     }
 
-        handleDonation(amount: number) {
+    handleDonation(amount: number) {
         if (amount === 300) {
             sysLogger.info('Donation received for amount 300. Triggering OUT-OF-TURN VOTE!');
             this.emit('vote:interrupted');
             this.stop();
-            setTimeout(() => {
+            if (this.donationRestartTimer) clearTimeout(this.donationRestartTimer);
+            this.donationRestartTimer = setTimeout(() => {
+                this.donationRestartTimer = null;
                 this.startCycle();
             }, 1000);
             return;
@@ -294,7 +309,8 @@ export class VotingManager extends EventEmitter {
         sysLogger.info(`Donation received for amount ${amount}. Force executing effect: ${randomEffect.name}`);
         this.emit('vip:effect', randomEffect.id);
     }
-getState(): VoteState {
+
+    getState(): VoteState {
         const totalVotes = this.options.reduce((sum, opt) => sum + opt.votes, 0);
         return {
             isActive: this.isActive,
@@ -310,6 +326,7 @@ getState(): VoteState {
         if (this.timer) { clearInterval(this.timer); this.timer = null; }
         if (this.cooldownTimer) { clearTimeout(this.cooldownTimer); this.cooldownTimer = null; }
         if (this.interventionTimer) { clearTimeout(this.interventionTimer); this.interventionTimer = null; }
+        if (this.donationRestartTimer) { clearTimeout(this.donationRestartTimer); this.donationRestartTimer = null; }
         if (this.traitorState.active) {
             if (this.traitorState.timer) clearTimeout(this.traitorState.timer);
             this.traitorState = { active: false, username: null, options: [], timer: null };

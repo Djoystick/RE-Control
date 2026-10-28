@@ -1,9 +1,10 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
+export {}
 
 declare global {
   interface Window {
-    electron: ElectronAPI
+    electron?: any
     api: {
+      versions?: NodeJS.ProcessVersions
       startSimulator: () => void
       stopSimulator: () => void
       updateSettings: (settings: any) => void
@@ -21,9 +22,10 @@ declare global {
       onTraitorEnd: (callback: (state: any) => void) => () => void
       onTrustedCount: (callback: (count: number) => void) => () => void
       removeListener?: (channel: string, listener: (...args: any[]) => void) => void
-      saveTwitchAuth: (username: string, token: string, channel: string) => Promise<void>
-      getTwitchAuth: () => Promise<{ username: string; token: string; channel?: string } | null>
+      saveTwitchAuth: (username: string, token: string, channel: string) => Promise<{ success: boolean; error?: string }>
+      getTwitchAuth: () => Promise<{ username: string; token?: string; hasToken: boolean; maskedToken: string; channel?: string } | null>
       validateTwitchToken: (token: string) => Promise<boolean>
+      sendTwitchTestPing: (channel?: string) => Promise<{ success: boolean; message?: string; error?: string }>
       
       // Setup Wizard API
       getGames: () => Promise<any[]>
@@ -39,6 +41,7 @@ declare global {
       getVolume: () => Promise<number>
       setVolume: (volume: number) => Promise<number>
       getObsStatus: () => Promise<{ connected: boolean; count: number }>
+      getOverlayUrl: () => Promise<string>
       onObsStatus: (cb: (data: { connected: boolean; count: number }) => void) => () => void
       getRemoteInfo: () => Promise<{ url: string; qr: string; clients: number }>
       triggerEffect: (effectId: string) => Promise<string>

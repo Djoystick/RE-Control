@@ -1,14 +1,23 @@
-﻿// OpenRouter Worker — отправляет задачи к любой модели OpenRouter
+// OpenRouter Worker — отправляет задачи к любой модели OpenRouter
 // Запуск: MODEL_ID="poolside/laguna-s-2.1:free" OPENROUTER_API_KEY="sk-..." node scripts/openrouter_worker.js
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { ProxyAgent, setGlobalDispatcher } from 'undici';
+
+const PROXY_URL = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || 'http://127.0.0.1:2080';
+try {
+  setGlobalDispatcher(new ProxyAgent(PROXY_URL));
+} catch (e) {
+  // ignore if proxy unavailable
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const API_KEY = process.env.OPENROUTER_API_KEY;
-const MODEL_ID = process.env.MODEL_ID || 'poolside/laguna-s-2.1:free';
+const MODEL_ID = process.env.MODEL_ID || 'cohere/north-mini-code:free';
 const TASK_FILE = process.env.TASK_FILE || path.join(__dirname, '../local_docs/current_task.md');
 const OUTPUT_FILE = process.env.OUTPUT_FILE || path.join(__dirname, '../local_docs/llm_output.md');
 

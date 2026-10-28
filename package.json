@@ -1,10 +1,18 @@
 {
   "name": "re-control",
-  "version": "1.1.0",
-  "description": "An Electron application with React and TypeScript",
+  "version": "1.2.0",
+  "description": "RE:CONTROL — интерактивная Twitch-интеграция для Resident Evil: зрители голосуют, донатят и применяют эффекты в игре в реальном времени",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "Djoystick",
+  "homepage": "https://github.com/Djoystick/RE-Control",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Djoystick/RE-Control.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Djoystick/RE-Control/issues"
+  },
+  "license": "SEE LICENSE IN README.md",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
@@ -25,12 +33,10 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "adm-zip": "^0.6.0",
-    "axios": "^1.20.0",
     "better-sqlite3": "^13.0.3",
     "dotenv": "^17.4.2",
     "framer-motion": "^13.1.1",
     "lucide-react": "^1.34.0",
-    "puppeteer": "^25.9.0",
     "qrcode": "^1.5.4",
     "tmi.js": "^1.8.5",
     "ws": "^8.21.3"

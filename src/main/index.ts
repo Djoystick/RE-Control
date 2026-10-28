@@ -107,16 +107,31 @@ function createWindow(): void {
 
   ipcMain.handle('settings:saveTwitchAuth', (_, { username, token, channel }) => {
     const configPath = join(app.getPath('userData'), 'twitch_config.json')
-    const payload: any = { username, channel }
-    if (token) {
+    let existing: any = {}
+    if (fs.existsSync(configPath)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+      } catch {}
+    }
+
+    const payload: any = {
+      username: username ?? existing.username ?? '',
+      channel: channel ?? existing.channel ?? ''
+    }
+
+    if (token && typeof token === 'string' && !token.includes('••••')) {
       if (safeStorage.isEncryptionAvailable()) {
         payload.encryptedToken = safeStorage.encryptString(token).toString('base64')
         payload.isEncrypted = true
       } else {
-        payload.token = token
-        payload.isEncrypted = false
+        sysLogger.error('safeStorage is not available. Refusing to store OAuth token in plaintext!')
+        return { success: false, error: 'Безопасное хранилище (safeStorage) недоступно. Сохранение токена в открытом виде заблокировано для безопасности.' }
       }
+    } else if (existing.encryptedToken) {
+      payload.encryptedToken = existing.encryptedToken
+      payload.isEncrypted = existing.isEncrypted
     }
+
     fs.writeFileSync(configPath, JSON.stringify(payload, null, 2))
     return { success: true }
   })
@@ -126,13 +141,13 @@ function createWindow(): void {
     if (fs.existsSync(configPath)) {
       try {
         const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-        let token = ''
-        if (raw.isEncrypted && raw.encryptedToken && safeStorage.isEncryptionAvailable()) {
-          token = safeStorage.decryptString(Buffer.from(raw.encryptedToken, 'base64'))
-        } else if (raw.token) {
-          token = raw.token
+        const hasToken = !!(raw.encryptedToken || raw.token)
+        return {
+          username: raw.username || '',
+          channel: raw.channel || '',
+          hasToken,
+          maskedToken: hasToken ? '••••••••••••••••' : ''
         }
-        return { username: raw.username || '', channel: raw.channel || '', token }
       } catch (e) {
         sysLogger.error('Failed to read twitch auth config: ' + e)
         return null
@@ -192,7 +207,16 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    try {
+      const parsed = new URL(details.url)
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        shell.openExternal(details.url)
+      } else {
+        sysLogger.warn(`[Security] Blocked attempt to open external non-http URL: ${details.url}`)
+      }
+    } catch {
+      sysLogger.warn(`[Security] Invalid URL passed to openExternal: ${details.url}`)
+    }
     return { action: 'deny' }
   })
 
@@ -209,6 +233,13 @@ function createWindow(): void {
   const votingManager = new VotingManager()
   const overlayServer = new OverlayServer()
   const donationBridge = new DonationBridge()
+
+  app.on('before-quit', () => {
+    sysLogger.info('[App] Clean shutdown initiated...')
+    try { votingManager.stop() } catch { /* ignore */ }
+    try { overlayServer.stop() } catch { /* ignore */ }
+    try { dbManager.close() } catch { /* ignore */ }
+  })
 
   donationBridge.on('donation:received', ({ amount }) => {
     mainWindow.webContents.send('simulator:syslog', { message: 'DONATION RECEIVED: ' + amount })
@@ -230,6 +261,16 @@ function createWindow(): void {
 
   let activeTwitchChannel: string = '';
 
+  twitchBridge.onStatusChange((status) => {
+    mainWindow.webContents.send('twitch:status', {
+      connected: status.connected,
+      channel: activeTwitchChannel,
+      botUsername: status.botUsername,
+      botAuthenticated: status.botAuthenticated,
+      isMod: status.isMod
+    })
+  })
+
   // 2. Voting Manager Events route to UI and Game Bridge
   votingManager.on('vote:interrupted', () => {
     mainWindow.webContents.send('simulator:syslog', { message: 'VOTE INTERRUPTED BY VIP DONATION!' })
@@ -244,7 +285,7 @@ function createWindow(): void {
 
     if (activeTwitchChannel) {
       const optionsText = state.options.map((opt: any) => `[${opt.id}] ${opt.displayName}`).join('  |  ');
-      twitchBridge.sendMessage(activeTwitchChannel, `📢 ГОЛОСОВАНИЕ! Пишите цифру: ${optionsText}`);
+      twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] Инициализирован био-протокол голосования! Модификаторы Леона (1-3): ${optionsText} (30 сек)`);
     }
   })
 
@@ -252,7 +293,7 @@ function createWindow(): void {
     mainWindow.webContents.send('simulator:syslog', { message: state.message })
     overlayServer.broadcast('vote:intervention', state)
     if (activeTwitchChannel) {
-      twitchBridge.sendMessage(activeTwitchChannel, `🚨 ВМЕШАТЕЛЬСТВО АМБРЕЛЛЫ: ${state.message}`);
+      twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 🚨 ДИРЕКТИВА АМБРЕЛЛЫ: ${state.message}`);
     }
   })
 
@@ -306,6 +347,10 @@ function createWindow(): void {
   ipcMain.handle('obs:getStatus', () => {
     const count = overlayServer.getClientCount()
     return { connected: count > 0, count }
+  })
+
+  ipcMain.handle('obs:getOverlayUrl', () => {
+    return overlayServer.getOverlayUrl()
   })
 
   // --- WEB REMOTE (STREAM DECK) ---
@@ -366,19 +411,24 @@ function createWindow(): void {
     mainWindow.webContents.send('vote:update', state)
     mainWindow.webContents.send('simulator:syslog', { message: 'WINNER: ' + winner.displayName })
     overlayServer.broadcast('vote:end', { winner, state })
-    // Emit effect:start since REBridge doesn't tell us when it really starts. 
-    // We assume it starts immediately after voting. 10000ms is a placeholder.
-    overlayServer.broadcast('effect:start', { effect: winner.displayName, duration: 10000 })
-    setTimeout(() => {
-        overlayServer.broadcast('effect:end', { effect: winner.displayName })
-    }, 10000)
-    
+
     if (activeTwitchChannel) {
-      twitchBridge.sendMessage(activeTwitchChannel, `🏆 ГОЛОСОВАНИЕ ЗАВЕРШЕНО! Эффект [ ${winner.displayName} ] победил (${winner.votes} голосов)!`);
+      twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 🏆 Протокол завершен: [ ${winner.displayName} ] активирован (${winner.votes} голосов)!`);
     }
 
-    // Send effect to the game
-    gameBridge.sendCommand(winner.effectId).catch((err) => { console.warn('Bridge timeout (Game Offline):', err.message); mainWindow.webContents.send('simulator:syslog', { message: 'GAME OFFLINE: Effect not executed.' }); })
+    // Send effect to the game, then announce on the overlay for as long as the game reports it active
+    gameBridge.sendCommand(winner.effectId).then((result) => {
+      let durationMs = 8000;
+      try {
+        const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+        const reported = parsed && typeof parsed.duration === 'number' ? parsed.duration * 1000 : NaN;
+        if (!isNaN(reported) && reported > 0) durationMs = Math.min(reported, 120000);
+      } catch {}
+      overlayServer.broadcast('effect:start', { effect: winner.displayName, duration: durationMs })
+      setTimeout(() => {
+        overlayServer.broadcast('effect:end', { effect: winner.displayName })
+      }, durationMs)
+    }).catch((err) => { console.warn('Bridge timeout (Game Offline):', err.message); mainWindow.webContents.send('simulator:syslog', { message: 'GAME OFFLINE: Effect not executed.' }); })
   })
 
   votingManager.on('trusted:count', (count) => {
@@ -395,7 +445,7 @@ function createWindow(): void {
     overlayServer.broadcast('traitor:start', state)
     
     if (activeTwitchChannel) {
-      twitchBridge.sendMessage(activeTwitchChannel, `🚨 ВНИМАНИЕ! 💀 ПРЕДАТЕЛЬ @${state.username} ЗАХВАТИЛ УПРАВЛЕНИЕ! 💀`);
+      twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 💀 КРИТИЧЕСКАЯ УГРОЗА! Предатель @${state.username} перехватил терминал био-контроля!`);
     }
   })
 
@@ -406,6 +456,9 @@ function createWindow(): void {
     }
     mainWindow.webContents.send('traitor:end', state)
     mainWindow.webContents.send('simulator:syslog', { message: `TRAITOR MODE ENDED!` })
+    if (activeTwitchChannel) {
+      twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] Контроль над объектом восстановлен. Возврат в стандартный протокол.`);
+    }
   })
 
   votingManager.on('traitor:effect', (effectId) => {
@@ -462,13 +515,19 @@ function createWindow(): void {
 
   ipcMain.handle('audio:read-file', async (_, folder: string, file: string) => {
     const fsPromises = require('node:fs/promises');
-    const filePath = join(getAudioBasePath(), folder, file)
-    if (fs.existsSync(filePath)) {
-      const buffer = await fsPromises.readFile(filePath)
-      return buffer.toString('base64')
+    const path = require('node:path');
+    const base = path.resolve(getAudioBasePath());
+    const filePath = path.resolve(base, folder, file);
+    if (!filePath.startsWith(base)) {
+      sysLogger.warn(`[Security] Path traversal attempt blocked in audio:read-file: folder=${folder}, file=${file}`);
+      return null;
     }
-    return null
-  })
+    if (fs.existsSync(filePath)) {
+      const buffer = await fsPromises.readFile(filePath);
+      return buffer.toString('base64');
+    }
+    return null;
+  });
 
   
   ipcMain.handle('simulator:force-narrator', (_, type: string) => {
@@ -489,7 +548,7 @@ function createWindow(): void {
       try {
         const conf = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         if (conf.gamePath) {
-          const exes = ['re2.exe', 're3.exe', 're4.exe', 'witcher3.exe'];
+          const exes = ['re2.exe', 're3.exe', 're4.exe'];
           let targetExe: string = "";
           for (const exe of exes) {
             const possiblePath = join(conf.gamePath, exe);
@@ -498,14 +557,27 @@ function createWindow(): void {
               break;
             }
           }
-          
+
           if (targetExe === "") {
-            targetExe = conf.gamePath; // Fallback
+            sysLogger.warn('[Game] No known game executable found in path, aborting launch.');
+            mainWindow.webContents.send('simulator:syslog', { message: 'GAME LAUNCH FAILED: .exe not found' });
+            return false;
           }
-          
+
           sysLogger.info(`[Game] Launching: ${targetExe}`);
           execFile(targetExe, [], { cwd: conf.gamePath }, (error) => {
-            if (error) sysLogger.error(`[Game Launch Error]: ${error.message}`);
+            if (error) {
+              // Steam DRM or missing runtime: fall back to the Steam protocol
+              const steamIds: Record<string, string> = { 're2.exe': '883710', 're3.exe': '1172620', 're4.exe': '2050650' };
+              const exeName = targetExe.split('\\').pop() || '';
+              const steamId = steamIds[exeName];
+              if (steamId) {
+                sysLogger.warn(`[Game] Direct launch failed (${error.message}). Retrying via Steam (app ${steamId}).`);
+                shell.openExternal(`steam://rungameid/${steamId}`);
+              } else {
+                sysLogger.error(`[Game Launch Error]: ${error.message}`);
+              }
+            }
           });
           return true;
         }
@@ -532,12 +604,24 @@ function createWindow(): void {
         activeTwitchChannel = channel;
         sysLogger.info('Twitch connection successful.');
         mainWindow.webContents.send('simulator:syslog', { message: 'TWITCH CONNECTED: #' + channel })
-        mainWindow.webContents.send('twitch:status', { connected: true, channel, botAuthenticated: twitchBridge.isBotAuthenticated })
+        mainWindow.webContents.send('twitch:status', { 
+            connected: true, 
+            channel, 
+            botUsername: twitchBridge.botUsername, 
+            botAuthenticated: twitchBridge.isBotAuthenticated,
+            isMod: twitchBridge.isMod 
+        })
         overlayServer.broadcast('twitch:connected', { channel })
     }).catch(err => {
         sysLogger.error('Twitch connection failed', err);
         mainWindow.webContents.send('simulator:syslog', { message: 'TWITCH CONNECTION FAILED!' })
-        mainWindow.webContents.send('twitch:status', { connected: false, channel: '', botAuthenticated: false })
+        mainWindow.webContents.send('twitch:status', { 
+            connected: false, 
+            channel: '', 
+            botUsername: '', 
+            botAuthenticated: false,
+            isMod: false 
+        })
     });
   })
 
@@ -546,8 +630,22 @@ function createWindow(): void {
     twitchBridge.disconnect()
     votingManager.stop()
     mainWindow.webContents.send('simulator:syslog', { message: 'TWITCH DISCONNECTED' })
-    mainWindow.webContents.send('twitch:status', { connected: false, channel: '', botAuthenticated: false })
+    mainWindow.webContents.send('twitch:status', { 
+        connected: false, 
+        channel: '', 
+        botUsername: '', 
+        botAuthenticated: false,
+        isMod: false 
+    })
     overlayServer.broadcast('twitch:disconnected', {})
+  })
+
+  ipcMain.handle('twitch:sendTestPing', async (_, channelInput?: string) => {
+    const target = channelInput?.trim() || activeTwitchChannel;
+    if (!target) {
+      return { success: false, error: 'Канал стримера не указан' };
+    }
+    return await twitchBridge.sendTestPing(target);
   })
 
   ipcMain.handle('twitch:validateToken', async (_, token: string) => {
@@ -587,7 +685,7 @@ if (!gotTheLock) {
   })
 
   app.whenReady().then(() => {
-    electronApp.setAppUserModelId('com.electron')
+    electronApp.setAppUserModelId('com.djoystick.re-control')
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)
     })

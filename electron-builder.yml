@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: re-control
+appId: com.djoystick.re-control
+productName: RE:CONTROL
 directories:
   buildResources: build
 files:
@@ -40,12 +40,9 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
-  category: Utility
+  maintainer: Djoystick
+  category: Game
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
 
