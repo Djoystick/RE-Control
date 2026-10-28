@@ -21,6 +21,7 @@ import { Installer } from './setup/Installer'
 import fs from 'fs'
 import { OverlayServer } from './overlay/OverlayServer'
 import { VOTABLE_EFFECTS } from '../shared/effects-registry'
+import { GAME_PROFILES, resolveProfile } from '../shared/game-profiles'
 
 const gameFinder = new GameFinder()
 const installer = new Installer()
@@ -227,7 +228,7 @@ function createWindow(): void {
 
   ipcMain.handle('setup:browseExe', () => gameFinder.browseForGame());
 
-  ipcMain.handle('setup:install', async (_, { gamePath, archiveName }: { gamePath: string; archiveName: string }) => {
+  ipcMain.handle('setup:install', async (_, { gamePath, archiveName, gameId }: { gamePath: string; archiveName: string; gameId?: string }) => {
     await installer.install({
       gamePath,
       archiveName,
@@ -235,9 +236,29 @@ function createWindow(): void {
         mainWindow.webContents.send('install:progress', { percent, message });
       }
     });
-    
+
+    const profile = resolveProfile(gameId ?? 'RE2');
+    votingManager.setGameProfile(profile);
+    overlayServer.setGameProfile(profile);
+
     const configPath = join(app.getPath('userData'), 'game_config.json');
-    fs.writeFileSync(configPath, JSON.stringify({ gamePath }));
+    fs.writeFileSync(configPath, JSON.stringify({ gamePath, gameId: gameId ?? 'RE2', profile }));
+  });
+
+  ipcMain.handle('setup:getGameProfile', () => ({
+    profile: votingManager.getGameProfile(),
+    ...GAME_PROFILES[votingManager.getGameProfile()]
+  }));
+
+  // Demo mode: no game, no REFramework — simulator only
+  ipcMain.handle('setup:startDemo', () => {
+    const configPath = join(app.getPath('userData'), 'game_config.json');
+    fs.writeFileSync(configPath, JSON.stringify({ demo: true, gameId: 'RE2', profile: 're2' }));
+    votingManager.setGameProfile('re2');
+    overlayServer.setGameProfile('re2');
+    simulator.startSimulating(700);
+    mainWindow.webContents.send('simulator:syslog', { message: 'DEMO MODE: игра не подключена, работает симулятор чата.' });
+    return { demo: true };
   });
 
   ipcMain.handle('setup:saveGamePath', (_, gamePath: string) => {
@@ -248,8 +269,18 @@ function createWindow(): void {
   ipcMain.handle('setup:getStoredGamePath', () => {
     const configPath = join(app.getPath('userData'), 'game_config.json');
     if (fs.existsSync(configPath)) {
-      const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      return data.gamePath || null;
+      try {
+        const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        // Restore the game profile alongside the path so pools match the installed game
+        if (data.gameId) {
+          const profile = resolveProfile(data.gameId);
+          votingManager.setGameProfile(profile);
+          overlayServer.setGameProfile(profile);
+        }
+        return data.gamePath || null;
+      } catch {
+        return null;
+      }
     }
     return null;
   });

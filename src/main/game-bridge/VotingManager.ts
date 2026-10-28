@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import { ChatCommand } from '../chat-bridge/IChatBridge';
 import { dbManager } from '../db/DatabaseManager';
 import { VOTABLE_EFFECTS, type EffectDef } from '../../shared/effects-registry';
+import { getProfileEffects, type GameProfileId } from '../../shared/game-profiles';
 import { sessionStore, type DirectorSession } from './SessionStore';
 
 export interface VoteOption {
@@ -106,6 +107,24 @@ export class VotingManager extends EventEmitter {
         category: e.category,
         winRounds: 0
     }));
+    private gameProfile: GameProfileId = 're2';
+
+    /**
+     * Переключает профиль игры: пул голосования ограничивается
+     * поддерживаемыми в этой игре эффектами.
+     */
+    setGameProfile(profileId: GameProfileId) {
+        this.gameProfile = profileId;
+        const supported = new Set(getProfileEffects(profileId).filter(e => e.votable).map(e => e.id));
+        this.effectPool = VOTABLE_EFFECTS
+            .filter(e => supported.has(e.id))
+            .map((e: EffectDef) => ({ id: e.id, name: e.name, category: e.category, winRounds: 0 }));
+        sysLogger.info(`[Profile] Game profile "${profileId}" — ${this.effectPool.length} votable effects`);
+    }
+
+    getGameProfile(): GameProfileId {
+        return this.gameProfile;
+    }
 
     private activeTrustedUsers = new Map<string, number>();
     // One viewer = one vote; a new digit from the same viewer moves their vote

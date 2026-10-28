@@ -68,10 +68,12 @@ const api = {
   findGame: (steamAppId: string, exeName: string) =>
     ipcRenderer.invoke('setup:findGame', { steamAppId, exeName }),
   browseExe: () => ipcRenderer.invoke('setup:browseExe'),
-  install: (gamePath: string, archiveName: string) =>
-    ipcRenderer.invoke('setup:install', { gamePath, archiveName }),
+  install: (gamePath: string, archiveName: string, gameId?: string) =>
+    ipcRenderer.invoke('setup:install', { gamePath, archiveName, gameId }),
   updateScripts: (gamePath: string) =>
     ipcRenderer.invoke('setup:updateScripts', { gamePath }),
+  startDemoMode: () => ipcRenderer.invoke('setup:startDemo'),
+  getGameProfile: () => ipcRenderer.invoke('setup:getGameProfile'),
   onInstallProgress: (cb: (data: { percent: number; message: string }) => void) => {
     const handler = (_: any, d: any) => cb(d)
     ipcRenderer.on('install:progress', handler)

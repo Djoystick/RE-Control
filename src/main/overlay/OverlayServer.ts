@@ -8,6 +8,7 @@ import { EventEmitter } from 'events';
 import QRCode from 'qrcode';
 import { sysLogger } from '../utils/logger';
 import { EFFECTS_REGISTRY, type RemoteSection } from '../../shared/effects-registry';
+import { getProfileEffects, type GameProfileId } from '../../shared/game-profiles';
 
 export function getLocalIp(): string {
     const interfaces = os.networkInterfaces();
@@ -46,6 +47,8 @@ export class OverlayServer extends EventEmitter {
     private port: number = 27016;
     private clients: Set<WebSocket> = new Set();
     private authToken: string = crypto.randomBytes(16).toString('hex');
+    /** Игровой профиль: фильтрует плитки Web Remote (v1.6.0) */
+    private gameProfile: GameProfileId = 're2';
     private triggerRateMap: Map<string, { count: number; resetAt: number }> = new Map();
     public static readonly MAX_BODY_BYTES = 64 * 1024; // 64 KB
     public static readonly MAX_WS_CLIENTS = 16;
@@ -439,6 +442,12 @@ export class OverlayServer extends EventEmitter {
         return this.clients.size;
     }
 
+    /** Профиль игры для фильтрации плиток пульта (v1.6.0) */
+    public setGameProfile(profileId: GameProfileId): void {
+        this.gameProfile = profileId;
+        sysLogger.info(`[OverlayServer] Game profile for Web Remote: ${profileId}`);
+    }
+
     public getLocalUrl(): string {
         return `http://${getLocalIp()}:${this.port}/remote?token=${this.authToken}`;
     }
@@ -471,6 +480,7 @@ export class OverlayServer extends EventEmitter {
 
     /** Renders the effect card sections of the Web Remote from the shared registry */
     private renderRemoteSections(): string {
+        const allowed = new Set(getProfileEffects(this.gameProfile).map(e => e.id));
         const sections: { key: RemoteSection; title: string; css: string }[] = [
             { key: 'negative', title: '⚡ ВРЕДИТЕЛЬСТВО (ОТРИЦАТЕЛЬНЫЕ)', css: 'red' },
             { key: 'positive', title: '💚 ПОМОЩЬ (ПОЛОЖИТЕЛЬНЫЕ)', css: 'green' },
@@ -479,7 +489,7 @@ export class OverlayServer extends EventEmitter {
 
         return sections.map(section => {
             const cards = EFFECTS_REGISTRY
-                .filter(e => e.remoteSection === section.key)
+                .filter(e => e.remoteSection === section.key && allowed.has(e.id))
                 .map(e => {
                     const title = e.name.split(' (')[0];
                     const sub = e.description;

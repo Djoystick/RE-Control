@@ -33,7 +33,9 @@ declare global {
       getGames: () => Promise<any[]>
       findGame: (steamAppId: string, exeName: string) => Promise<{ found: boolean; path?: string }>
       browseExe: () => Promise<{ canceled: boolean; filePaths: string[] }>
-      install: (gamePath: string, archiveName: string) => Promise<void>
+      install: (gamePath: string, archiveName: string, gameId?: string) => Promise<void>
+      startDemoMode: () => Promise<{ demo: boolean }>
+      getGameProfile: () => Promise<any>
       updateScripts: (gamePath: string) => Promise<void>
       onInstallProgress: (cb: (data: { percent: number; message: string }) => void) => () => void
       saveStoredGamePath: (path: string) => Promise<void>

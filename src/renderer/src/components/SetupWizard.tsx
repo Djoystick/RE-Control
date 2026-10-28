@@ -70,10 +70,16 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
     setStep(3);
     setInstallProgress({ percent: 0, message: 'Начало установки...' });
     if (gamePath && selectedVariant) {
-      await (window as any).api?.install?.(gamePath, selectedVariant.archiveName);
+      await (window as any).api?.install?.(gamePath, selectedVariant.archiveName, selectedGameId);
       await (window as any).api?.saveStoredGamePath?.(gamePath);
     }
     setStep(4);
+  };
+
+  // Demo mode: skip installation entirely and run the chat simulator
+  const handleDemoMode = async () => {
+    await (window as any).api?.startDemoMode?.();
+    onComplete();
   };
   
   const handleUpdateScripts = async () => {
@@ -153,7 +159,8 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
 
                   {selectedGame?.status === 'coming_soon' ? (
                     <div className="mt-4 p-3 bg-[#302010] border border-pixel-amber rounded text-xs text-pixel-amber">
-                      ⚠ Поддержка игры {selectedGame.displayName} находится в разработке (Этап 6 Roadmap). Выберите Resident Evil 2 для стабильной работы моста.
+                      ⚠ {selectedGame.displayName}: REFramework будет установлен, но Lua-мост эффектов адаптирован только под RE2 Remake.
+                      Голосования, оверлей и бот работают; игровые эффекты в этой игре не применяются. Выберите Resident Evil 2 для полного набора.
                     </div>
                   ) : (
                     <button 
@@ -163,6 +170,16 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                       Найти игру →
                     </button>
                   )}
+
+                  <button
+                    className="mt-2 w-full bg-pixel-void hover:bg-pixel-muted text-pixel-amber font-bold py-2 border-2 border-dashed border-pixel-amber/60 rounded transition-all hover:shadow-[0_0_10px_rgba(245,158,11,0.25)] text-xs"
+                    onClick={handleDemoMode}
+                  >
+                    ▶ ПОПРОБОВАТЬ БЕЗ ИГРЫ (ДЕМО-РЕЖИМ)
+                  </button>
+                  <span className="text-[10px] text-pixel-muted text-center px-2">
+                    Запускает симулятор чата: голосования, интервенции, Директор и босс-раунды — без установки и без RE2.
+                  </span>
                 </div>
               )}
 

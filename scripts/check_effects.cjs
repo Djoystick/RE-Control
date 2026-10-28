@@ -66,6 +66,27 @@ if (missingInRegistry.length) {
     for (const id of missingInRegistry) console.error('   - ' + id);
 }
 
+
+// ── Game profile validation (v1.6.0) ──────────────────────────────────────
+const profilesPath = path.join(root, 'src', 'shared', 'game-profiles.ts');
+if (fs.existsSync(profilesPath)) {
+    const profilesSrc = fs.readFileSync(profilesPath, 'utf8');
+    const profileBlocks = [...profilesSrc.matchAll(/(re2|re3|generic):\s*\{([\s\S]*?)\n    \}/g)];
+    const idSet = new Set(ids);
+
+    for (const [, name, body] of profileBlocks) {
+        const unsupportedMatch = body.match(/unsupportedEffects:\s*\[([^\]]*)\]/);
+        if (!unsupportedMatch) continue;
+        const listed = [...unsupportedMatch[1].matchAll(/'([a-z0-9_]+)'/g)].map(m => m[1]);
+        const unknown = listed.filter(id => !idSet.has(id));
+        if (unknown.length) {
+            failed = true;
+            console.error(`✖ Profile "${name}" excludes unknown effect ids:`);
+            for (const id of unknown) console.error('   - ' + id);
+        }
+    }
+}
+
 if (failed) {
     console.error('\nEffects registry drift detected. Sync src/shared/effects-registry.ts and lua_scripts/effects.lua.');
     process.exit(1);
