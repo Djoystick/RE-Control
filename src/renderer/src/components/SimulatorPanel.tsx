@@ -1273,6 +1273,17 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
                 >
                   СОХРАНИТЬ ДИРЕКТОРА
                 </button>
+                <button
+                  className="w-full bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/70 text-emerald-200 text-xs uppercase font-mono font-bold py-2 rounded transition-colors whitespace-nowrap"
+                  onClick={async () => {
+                    const report = await window.api?.publishReport?.()
+                    if (report?.text) {
+                      try { await navigator.clipboard.writeText(report.text) } catch {}
+                    }
+                  }}
+                >
+                  ОПУБЛИКОВАТЬ ИТОГИ СТРИМА
+                </button>
               </div>
             </div>
 

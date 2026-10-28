@@ -61,6 +61,7 @@ export default function OverlayApp() {
   const [activeEffect, setActiveEffect] = useState<EffectState | null>(null)
   const [interventionBanner, setInterventionBanner] = useState<{ type: string; message: string } | null>(null)
   const [narratorData, setNarratorData] = useState<{ text: string, type: string } | null>(null)
+  const [reportData, setReportData] = useState<any | null>(null)
   
   // Local timer for smooth countdown
   const [localTimeRemaining, setLocalTimeRemaining] = useState(0)
@@ -72,6 +73,7 @@ export default function OverlayApp() {
     let narratorTimer: any;
     let narratorDataTimer: any;
     let effectTimer: any;
+    let reportTimer: any;
     
     const connect = () => {
       const loc = window.location;
@@ -91,6 +93,15 @@ export default function OverlayApp() {
           } else if (msg.type === 'vote:end') {
             setVoteState(null)
             setInterventionBanner(null)
+          } else if (msg.type === 'vote:shielded') {
+            setVoteState(null)
+            setInterventionBanner({ type: 'shield', message: `🛡 ЗАЩИТА @${msg.data.by}: [${msg.data.cancelled}] нейтрализован` })
+            clearTimeout(bannerTimer)
+            bannerTimer = setTimeout(() => setInterventionBanner(null), 6000)
+          } else if (msg.type === 'report:session') {
+            setReportData(msg.data)
+            clearTimeout(reportTimer)
+            reportTimer = setTimeout(() => setReportData(null), 15000)
           } else if (msg.type === 'vote:intervention') {
             setInterventionBanner(msg.data)
             clearTimeout(bannerTimer)
@@ -289,6 +300,42 @@ export default function OverlayApp() {
                   {narratorData.text}
                 </h2>
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Session report — shareable post-stream summary */}
+        <AnimatePresence>
+          {reportData && (
+            <motion.div
+              key="session-report"
+              initial={{ opacity: 0, x: 120 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 120 }}
+              transition={{ type: 'spring', damping: 22 }}
+              className="absolute bottom-12 left-12 bg-pixel-panel border-4 border-pixel-amber text-white p-6 rounded-xl shadow-pixel w-[460px]"
+            >
+              <div className="flex items-center gap-3 mb-3 border-b-4 border-pixel-border pb-3">
+                <span className="text-3xl">📊</span>
+                <h3 className="text-2xl font-bold tracking-wider text-pixel-amber uppercase">ИТОГИ СТРИМА</h3>
+              </div>
+              <p className="text-sm text-pixel-muted mb-3">Раундов: {reportData.rounds}</p>
+              <div className="flex flex-col gap-2">
+                {(reportData.leaderboard || []).map((v: any, i: number) => (
+                  <div key={v.username} className="flex justify-between text-lg font-bold">
+                    <span className="text-pixel-light">{i + 1}. {v.username}</span>
+                    <span className="text-pixel-cyan">{v.karma > 0 ? `+${v.karma}` : v.karma}</span>
+                  </div>
+                ))}
+              </div>
+              {reportData.hostile && (
+                <p className="mt-3 text-sm text-pixel-danger">
+                  ☠ Самый кровожадный: {reportData.hostile.username} ({reportData.hostile.negativeVotes})
+                </p>
+              )}
+              {reportData.megaMoments?.length > 0 && (
+                <p className="mt-1 text-sm text-pixel-amber">💥 MEGA: {reportData.megaMoments.join(', ')}</p>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

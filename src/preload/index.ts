@@ -56,6 +56,8 @@ const api = {
     ipcRenderer.removeListener(channel, listener)
   },
   getLeaderboard: () => ipcRenderer.invoke('db:getLeaderboard'),
+  getSessionReport: () => ipcRenderer.invoke('db:getSessionReport'),
+  publishReport: () => ipcRenderer.invoke('db:publishReport'),
   saveTwitchAuth: (username: string, token: string, channel: string) => ipcRenderer.invoke('settings:saveTwitchAuth', { username, token, channel }),
   getTwitchAuth: () => ipcRenderer.invoke('settings:getTwitchAuth'),
   validateTwitchToken: (token: string) => ipcRenderer.invoke('twitch:validateToken', token),

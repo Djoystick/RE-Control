@@ -7,6 +7,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { EventEmitter } from 'events';
 import QRCode from 'qrcode';
 import { sysLogger } from '../utils/logger';
+import { EFFECTS_REGISTRY, type RemoteSection } from '../../shared/effects-registry';
 
 export function getLocalIp(): string {
     const interfaces = os.networkInterfaces();
@@ -468,6 +469,35 @@ export class OverlayServer extends EventEmitter {
         }
     }
 
+    /** Renders the effect card sections of the Web Remote from the shared registry */
+    private renderRemoteSections(): string {
+        const sections: { key: RemoteSection; title: string; css: string }[] = [
+            { key: 'negative', title: '⚡ ВРЕДИТЕЛЬСТВО (ОТРИЦАТЕЛЬНЫЕ)', css: 'red' },
+            { key: 'positive', title: '💚 ПОМОЩЬ (ПОЛОЖИТЕЛЬНЫЕ)', css: 'green' },
+            { key: 'umbrella', title: '🧟 АМБРЕЛЛА И СПАВН', css: 'purple' }
+        ];
+
+        return sections.map(section => {
+            const cards = EFFECTS_REGISTRY
+                .filter(e => e.remoteSection === section.key)
+                .map(e => {
+                    const title = e.name.split(' (')[0];
+                    const sub = e.description;
+                    const escapedName = e.name.replace(/'/g, "\\'");
+                    return `        <div class="card ${section.css}" onclick="triggerEffect('${e.id}', this, '${escapedName}')">
+            <div class="card-top"><span class="card-icon">${e.icon || '▸'}</span></div>
+            <div class="card-title">${title}</div>
+            <div class="card-sub">${sub}</div>
+        </div>`;
+                }).join('\n');
+
+            return `    <div class="section-title ${section.css}">${section.title}</div>
+    <div class="grid">
+${cards}
+    </div>`;
+        }).join('\n\n');
+    }
+
     private getMobileRemoteHtml(token: string): string {
         return `<!DOCTYPE html>
 <html lang="ru">
@@ -686,138 +716,7 @@ export class OverlayServer extends EventEmitter {
         </div>
     </header>
 
-    <div class="section-title red">⚡ ВРЕДИТЕЛЬСТВО (ОТРИЦАТЕЛЬНЫЕ)</div>
-    <div class="grid">
-        <div class="card red" onclick="triggerEffect('empty_mag', this, 'Осечка (Пустой магазин)')">
-            <div class="card-top"><span class="card-icon">🔫</span></div>
-            <div class="card-title">Осечка</div>
-            <div class="card-sub">Пустой магазин</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('hop', this, 'Подскок (Ик!)')">
-            <div class="card-top"><span class="card-icon">🦘</span></div>
-            <div class="card-title">Подскок</div>
-            <div class="card-sub">Прыжок и посадка</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('push_back', this, 'Ветерок (Отброс)')">
-            <div class="card-top"><span class="card-icon">💨</span></div>
-            <div class="card-title">Ветерок</div>
-            <div class="card-sub">Толчок героя назад</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('spin_180', this, 'Разворот 180°')">
-            <div class="card-top"><span class="card-icon">🔄</span></div>
-            <div class="card-title">Разворот 180°</div>
-            <div class="card-sub">Головокружение</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('invert_controls', this, 'Инверт управления')">
-            <div class="card-top"><span class="card-icon">🎮</span></div>
-            <div class="card-title">Инверт</div>
-            <div class="card-sub">Пьяный геймпад 10с</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('blackout', this, 'Слепота (Blackout)')">
-            <div class="card-top"><span class="card-icon">🕶️</span></div>
-            <div class="card-title">Слепота</div>
-            <div class="card-sub">Черный экран 3с</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('static_burst', this, 'Помехи')">
-            <div class="card-top"><span class="card-icon">📺</span></div>
-            <div class="card-title">Помехи</div>
-            <div class="card-sub">Артефакты VHS 3с</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('slow_down', this, 'Замедление')">
-            <div class="card-top"><span class="card-icon">🐌</span></div>
-            <div class="card-title">Замедление</div>
-            <div class="card-sub">Тяжелые ботинки 5с</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('papercut', this, 'Царапина')">
-            <div class="card-top"><span class="card-icon">🩹</span></div>
-            <div class="card-title">Царапина</div>
-            <div class="card-sub">Снять 5% HP</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('damage_half', this, 'Урон 50%')">
-            <div class="card-top"><span class="card-icon">🩸</span></div>
-            <div class="card-title">Удар ножом</div>
-            <div class="card-sub">Снять 50% HP</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('fov_narrow', this, 'Клаустрофобия (FOV-)')">
-            <div class="card-top"><span class="card-icon">🔍</span></div>
-            <div class="card-title">Клаустрофобия</div>
-            <div class="card-sub">Сужение FOV 8с</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('fov_wide', this, 'Рыбий глаз (FOV+)')">
-            <div class="card-top"><span class="card-icon">🐟</span></div>
-            <div class="card-title">Рыбий глаз</div>
-            <div class="card-sub">Расширение FOV 8с</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('freeze', this, 'Заморозка (4с)')">
-            <div class="card-top"><span class="card-icon">❄️</span></div>
-            <div class="card-title">Заморозка</div>
-            <div class="card-sub">Остановка времени 4с</div>
-        </div>
-        <div class="card red" onclick="triggerEffect('jumpscare', this, 'Скример (Паника)')">
-            <div class="card-top"><span class="card-icon">😱</span></div>
-            <div class="card-title">Скример</div>
-            <div class="card-sub">Резкий испуг и тряска</div>
-        </div>
-    </div>
-
-    <div class="section-title green">💚 ПОМОЩЬ (ПОЛОЖИТЕЛЬНЫЕ)</div>
-    <div class="grid">
-        <div class="card green" onclick="triggerEffect('heal_small', this, 'Подорожник (+15% HP)')">
-            <div class="card-top"><span class="card-icon">🌿</span></div>
-            <div class="card-title">Подорожник</div>
-            <div class="card-sub">Лечение +15% HP</div>
-        </div>
-        <div class="card green" onclick="triggerEffect('heal_full', this, 'Полный хил')">
-            <div class="card-top"><span class="card-icon">💉</span></div>
-            <div class="card-title">Спрей</div>
-            <div class="card-sub">Восстановить 100% HP</div>
-        </div>
-        <div class="card green" onclick="triggerEffect('refill_ammo', this, 'Зарядить обойму')">
-            <div class="card-top"><span class="card-icon">📦</span></div>
-            <div class="card-title">Боекомплект</div>
-            <div class="card-sub">Заполнить обойму</div>
-        </div>
-        <div class="card green" onclick="triggerEffect('infinite_ammo', this, 'Бесконечные патроны')">
-            <div class="card-top"><span class="card-icon">♾️</span></div>
-            <div class="card-title">Безлимит</div>
-            <div class="card-sub">Бесконечные пули 15с</div>
-        </div>
-        <div class="card green" onclick="triggerEffect('speed_up', this, 'Ускорение')">
-            <div class="card-top"><span class="card-icon">⚡</span></div>
-            <div class="card-title">Адреналин</div>
-            <div class="card-sub">Ускорение игры 1.7x</div>
-        </div>
-        <div class="card green" onclick="triggerEffect('give_grenade', this, 'Выдать гранату')">
-            <div class="card-top"><span class="card-icon">💣</span></div>
-            <div class="card-title">Подарочек</div>
-            <div class="card-sub">Бонусные патроны</div>
-        </div>
-    </div>
-
-    <div class="section-title purple">🧟 АМБРЕЛЛА И СПАВН</div>
-    <div class="grid">
-        <div class="card purple" onclick="triggerEffect('spawn_zombie', this, 'Спавн Зомби')">
-            <div class="card-top"><span class="card-icon">🧟</span></div>
-            <div class="card-title">Зомби</div>
-            <div class="card-sub">Толчок и помехи</div>
-        </div>
-        <div class="card purple" onclick="triggerEffect('spawn_licker', this, 'Спавн Лизуна')">
-            <div class="card-top"><span class="card-icon">🦎</span></div>
-            <div class="card-title">Лизун</div>
-            <div class="card-sub">Подскок и паника</div>
-        </div>
-        <div class="card purple" onclick="triggerEffect('spawn_dog', this, 'Спавн Цербера')">
-            <div class="card-top"><span class="card-icon">🐕</span></div>
-            <div class="card-title">Цербер</div>
-            <div class="card-sub">Разворот 180°</div>
-        </div>
-        <div class="card purple" onclick="triggerEffect('fake_mrx', this, 'Шаги Тирана')">
-            <div class="card-top"><span class="card-icon">🧥</span></div>
-            <div class="card-title">Мистер X</div>
-            <div class="card-sub">Тряска шагов Тирана</div>
-        </div>
-    </div>
-
+    ${this.renderRemoteSections()}
     <div id="toast">✅ Эффект отправлен!</div>
 
     <script>

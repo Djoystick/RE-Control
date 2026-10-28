@@ -17,6 +17,7 @@ import { GameFinder } from './setup/GameFinder'
 import { Installer } from './setup/Installer'
 import fs from 'fs'
 import { OverlayServer } from './overlay/OverlayServer'
+import { VOTABLE_EFFECTS } from '../shared/effects-registry'
 
 const gameFinder = new GameFinder()
 const installer = new Installer()
@@ -146,6 +147,19 @@ function createWindow(): void {
   // Expose DB IPC
   ipcMain.handle('db:getLeaderboard', () => {
     return dbManager.getTopKarma(5);
+  });
+
+  ipcMain.handle('db:getSessionReport', () => {
+    return votingManager.getSessionReport();
+  });
+
+  ipcMain.handle('db:publishReport', () => {
+    const report = votingManager.getSessionReport();
+    const text = report.text;
+    mainWindow.webContents.send('simulator:syslog', { message: text });
+    overlayServer.broadcast('report:session', report);
+    if (activeTwitchChannel) twitchBridge.sendMessage(activeTwitchChannel, text);
+    return report;
   });
 
   ipcMain.handle('settings:saveTwitchAuth', (_, { username, token, channel }) => {
@@ -313,23 +327,31 @@ function createWindow(): void {
     if (reply) twitchBridge.sendMessage(activeTwitchChannel, reply);
   });
 
+  // Stateful karma abilities and the session report answer directly
+  votingManager.on('bot:reply', (message: string) => {
+    mainWindow.webContents.send('simulator:syslog', { message });
+    if (activeTwitchChannel) twitchBridge.sendMessage(activeTwitchChannel, message);
+  });
+
   function buildBotReply(command: string, username: string): string | null {
     const top = dbManager.getTopKarma(5);
     switch (command) {
       case '!karma':
       case '!me': {
         const karma = dbManager.getViewerKarma(username);
-        return `☣️ [UMBRELLA CORP] @${username}, твоя карма: ${karma > 0 ? '+' : ''}${karma}`;
+        return `☣️ [UMBRELLA CORP] @${username}, твоя карма: ${karma > 0 ? '+' : ''}${karma}. !shield — ${VotingManager.SHIELD_COST} (нейтрализовать враждебный эффект, 1 раз за стрим), !reroll — ${VotingManager.REROLL_COST} (перебросить тройку).`;
       }
       case '!top': {
         if (top.length === 0) return `☣️ [UMBRELLA CORP] Лидерборд пуст — проголосуй цифрой 1-3!`;
         const lines = top.map((v, i) => `${i + 1}. ${v.username} (${v.karma > 0 ? '+' : ''}${v.karma})`).join(' | ');
         return `☣️ [UMBRELLA CORP] Топ оперативников: ${lines}`;
       }
-      case '!effects':
-        return `☣️ [UMBRELLA CORP] Пул эффектов: Подорожник, Адреналин, Патроны, Ветерок, Царапина, Замедление, Осечка, Подскок, Разворот 180°, FOV, Помехи, Слепота, Инверт и др. Голосуй цифрой во время раунда! 5 голосов подряд = MEGA-версия.`;
+      case '!effects': {
+        const list = VOTABLE_EFFECTS.map(e => e.name.split(' (')[0]).join(', ');
+        return `☣️ [UMBRELLA CORP] Пул эффектов (${VOTABLE_EFFECTS.length}): ${list}. Голосуй цифрой во время раунда! 5 голосов подряд = MEGA-версия.`;
+      }
       case '!help':
-        return `☣️ [UMBRELLA CORP] Команды: !karma — твоя карма | !top — лидерборд | !effects — список эффектов. Во время раунда пиши 1, 2 или 3.`;
+        return `☣️ [UMBRELLA CORP] Команды: !karma — карма и цены способностей | !top — лидерборд | !effects — список эффектов | !shield — защита (${VotingManager.SHIELD_COST} кармы) | !reroll — переброска (${VotingManager.REROLL_COST}) | !report — итоги стрима. Во время раунда пиши 1, 2 или 3.`;
       default:
         return null;
     }
@@ -382,7 +404,7 @@ function createWindow(): void {
     narrator.say('traitor')
   })
 
-  // Narrator: effect wins
+  // Narrator: effect wins (skipped when a karma shield cancels the effect)
   votingManager.on('vote:end', ({ winner }) => {
     if (!winner) return;
     if (winner.category === 'negative') {
@@ -481,9 +503,21 @@ function createWindow(): void {
     overlayServer.broadcast('vote:update', state)
   })
 
-  votingManager.on('vote:end', ({ winner, state }) => {
+  votingManager.on('vote:end', ({ winner, state, shieldedBy, cancelled }) => {
     simulator.stopSimulating()
     mainWindow.webContents.send('vote:update', state)
+
+    if (!winner) {
+      // Karma shield cancelled a hostile effect
+      mainWindow.webContents.send('simulator:syslog', { message: `SHIELD: ${shieldedBy} cancelled ${cancelled}` })
+      overlayServer.broadcast('vote:shielded', { by: shieldedBy, cancelled })
+      mainWindow.webContents.send('vote:shielded', { by: shieldedBy, cancelled })
+      if (activeTwitchChannel) {
+        twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 🛡 ЗАЩИТНЫЙ ПРОТОКОЛ @${shieldedBy}: враждебный модификатор [ ${cancelled} ] нейтрализован.`);
+      }
+      return
+    }
+
     mainWindow.webContents.send('simulator:syslog', { message: 'WINNER: ' + winner.displayName })
     overlayServer.broadcast('vote:end', { winner, state })
 

@@ -17,6 +17,8 @@ declare global {
       onSimulatorSyslog: (callback: (data: any) => void) => () => void
       onVoteUpdate: (callback: (state: any) => void) => () => void
       getLeaderboard: () => Promise<any>
+      getSessionReport: () => Promise<any>
+      publishReport: () => Promise<any>
       invokeTraitor: () => Promise<boolean>
       onTraitorStart: (callback: (state: any) => void) => () => void
       onTraitorEnd: (callback: (state: any) => void) => () => void

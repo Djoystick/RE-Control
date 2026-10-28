@@ -2,6 +2,7 @@ import { sysLogger } from '../utils/logger';
 import { EventEmitter } from 'events';
 import { ChatCommand } from '../chat-bridge/IChatBridge';
 import { dbManager } from '../db/DatabaseManager';
+import { VOTABLE_EFFECTS, type EffectDef } from '../../shared/effects-registry';
 
 export interface VoteOption {
     id: number;
@@ -74,39 +75,31 @@ export class VotingManager extends EventEmitter {
     private roundChatters = new Set<string>();
     private chatCommandHandler: ((command: string, username: string) => void) | null = null;
 
-    // The current pool of active verified effects
-    private effectPool: PoolEffect[] = [
-        // Positive
-        { id: 'light_heal', name: 'Подорожник (Лечение 15%)', category: 'positive' },
-        { id: 'speed_up', name: 'Адреналин (Ускорение)', category: 'positive' },
-        { id: 'care_package', name: 'С небес (Патроны)', category: 'positive' },
-        { id: 'green_herb', name: 'Зеленушка (Трава)', category: 'positive' },
-
-        // Negative
-        { id: 'push_back', name: 'Ветерок (Отброс)', category: 'negative' },
-        { id: 'papercut', name: 'Царапина (-5% ХП)', category: 'negative' },
-        { id: 'slow_down', name: 'Тяжелые ботинки (Замедление)', category: 'negative' },
-        { id: 'empty_mag', name: 'Осечка (Пустой магазин)', category: 'negative' },
-        { id: 'disarm', name: 'Пацифист (Оружие заблокировано)', category: 'negative' },
-
-        // Psychological / Troll
-        { id: 'hop', name: 'Ик! (Подскок)', category: 'psychological' },
-        { id: 'spin_180', name: 'Головокружение (180°)', category: 'psychological' },
-        { id: 'auto_run', name: 'Леон — спринтер', category: 'psychological' },
-        { id: 'fov_narrow', name: 'Клаустрофобия (FOV-)', category: 'psychological' },
-        { id: 'fov_wide', name: 'Рыбий глаз (FOV+)', category: 'psychological' },
-        { id: 'camera_shake', name: 'Паническая атака', category: 'psychological' },
-        { id: 'ui_wipe', name: 'Где мои очки? (UI Off)', category: 'psychological' },
-        { id: 'static_burst', name: 'Помехи экрана (2с)', category: 'psychological' },
-        { id: 'invert_controls', name: 'Пьяный геймпад (10с)', category: 'psychological' },
-        { id: 'blackout', name: 'Вырубили свет (3с)', category: 'psychological' },
-        { id: 'fake_mrx', name: 'Свой среди чужих (Шаги Тирана)', category: 'psychological' }
-    ];
+    // The current pool of active verified effects — sourced from the shared registry
+    private effectPool: PoolEffect[] = VOTABLE_EFFECTS.map((e: EffectDef) => ({
+        id: e.id,
+        name: e.name,
+        category: e.category,
+        winRounds: 0
+    }));
 
     private activeTrustedUsers = new Map<string, number>();
     // One viewer = one vote; a new digit from the same viewer moves their vote
     private voterChoices = new Map<string, number>();
     private traitorState: { active: boolean, username: string | null, options: any[], timer: NodeJS.Timeout | null } = { active: false, username: null, options: [], timer: null };
+
+    // --- Karma economy (v1.4.0) ---
+    /** Viewers who bought a shield; each entry cancels one upcoming hostile winner */
+    private pendingShields: string[] = [];
+    /** Viewers who already bought a shield this stream (one purchase per stream) */
+    private shieldBuyers = new Set<string>();
+    /** Reroll is limited to one use per voting round (any viewer may fund it) */
+    private rerollUsedThisRound = false;
+    /** Names of effects that reached MEGA status this stream (for the report) */
+    private megaMoments: string[] = [];
+
+    static readonly SHIELD_COST = 20;
+    static readonly REROLL_COST = 10;
 
     constructor() {
         super();
@@ -200,10 +193,89 @@ export class VotingManager extends EventEmitter {
     private handleChatCommandText(cmd: ChatCommand): boolean {
         const text = cmd.command.trim().toLowerCase();
         if (!text.startsWith('!')) return false;
+
+        // Karma abilities are stateful, so they are handled here rather than in the host
+        switch (text) {
+            case '!shield':
+                this.buyShield(cmd.username);
+                return true;
+            case '!reroll':
+                this.buyReroll(cmd.username);
+                return true;
+            case '!report':
+                this.emit('bot:reply', this.buildSessionReport());
+                return true;
+        }
+
         if (this.chatCommandHandler) {
             this.chatCommandHandler(text, cmd.username);
         }
         return true;
+    }
+
+    // ─── KARMA ECONOMY ───────────────────────────────────────────────────
+
+    private buyShield(username: string) {
+        if (this.shieldBuyers.has(username)) {
+            this.emit('bot:reply', `☣️ [UMBRELLA CORP] @${username}, защита уже куплена в этом стриме. Одна на стрим.`);
+            return;
+        }
+        if (!dbManager.spendKarma(username, VotingManager.SHIELD_COST)) {
+            this.emit('bot:reply', `☣️ [UMBRELLA CORP] @${username}, нужно ${VotingManager.SHIELD_COST} кармы для защиты. Голосуй за помощь, чтобы накопить.`);
+            return;
+        }
+        this.shieldBuyers.add(username);
+        this.pendingShields.push(username);
+        this.emit('bot:reply', `☣️ [UMBRELLA CORP] @${username} активировал ЗАЩИТНЫЙ ПРОТОКОЛ. Следующий враждебный эффект будет нейтрализован.`);
+        sysLogger.info(`[Karma] ${username} bought a shield (${VotingManager.SHIELD_COST} karma). Pending shields: ${this.pendingShields.length}`);
+    }
+
+    private buyReroll(username: string) {
+        if (!this.isActive) {
+            this.emit('bot:reply', `☣️ [UMBRELLA CORP] @${username}, переброска доступна только во время голосования.`);
+            return;
+        }
+        if (this.rerollUsedThisRound) {
+            this.emit('bot:reply', `☣️ [UMBRELLA CORP] @${username}, переброска уже использована в этом раунде.`);
+            return;
+        }
+        if (!dbManager.spendKarma(username, VotingManager.REROLL_COST)) {
+            this.emit('bot:reply', `☣️ [UMBRELLA CORP] @${username}, нужно ${VotingManager.REROLL_COST} кармы для переброски.`);
+            return;
+        }
+        this.rerollUsedThisRound = true;
+        const oldOptions = this.options.map(o => o.displayName);
+        this.buildVotingTriple();
+        this.emit('bot:reply', `☣️ [UMBRELLA CORP] @${username} оплатил ПЕРЕБРОСКУ протокола. Новые варианты: ${this.options.map(o => `[${o.id}] ${o.displayName}`).join(' | ')}`);
+        sysLogger.info(`[Karma] ${username} rerolled the round. Old: ${oldOptions.join(', ')}`);
+        this.emit('vote:update', this.getState());
+    }
+
+    buildSessionReport(): string {
+        const top = dbManager.getLeaderboardFull(5);
+        const hostile = dbManager.getTopNegative(1)[0];
+        if (top.length === 0) {
+            return '☣️ [UMBRELLA CORP] Отчёт пуст — в этом стриме ещё никто не голосовал.';
+        }
+        const topLine = top.map((v, i) => `${i + 1}) ${v.username} ${v.karma > 0 ? '+' : ''}${v.karma}`).join(' ');
+        const mega = this.megaMoments.length ? `MEGA: ${this.megaMoments.join(', ')}.` : 'MEGA не активировался.';
+        const hostileLine = hostile ? `Самый кровожадный: ${hostile.username} (${hostile.negativeVotes} враждебных голосов).` : '';
+        return `☣️ [UMBRELLA CORP] ИТОГИ СТРИМА: раундов — ${this.roundNumber}. Топ: ${topLine}. ${hostileLine} ${mega}`;
+    }
+
+    /** Snapshot for the overlay/UI report widget */
+    getSessionReport() {
+        return {
+            rounds: this.roundNumber,
+            leaderboard: dbManager.getLeaderboardFull(5),
+            hostile: dbManager.getTopNegative(1)[0] ?? null,
+            megaMoments: [...this.megaMoments],
+            text: this.buildSessionReport()
+        };
+    }
+
+    private consumeShieldIfAny(): string | null {
+        return this.pendingShields.shift() ?? null;
     }
 
     startCycle() {
@@ -211,21 +283,8 @@ export class VotingManager extends EventEmitter {
         this.startVote();
     }
 
-    private startVote() {
-        if (this.timer) { clearInterval(this.timer); this.timer = null; }
-        if (this.cooldownTimer) { clearTimeout(this.cooldownTimer); this.cooldownTimer = null; }
-        if (this.interventionTimer) { clearTimeout(this.interventionTimer); this.interventionTimer = null; }
-        this.isActive = true;
-        this.roundNumber++;
-
-        this.interventionState = null;
-        this.timeRemainingMs = this.VOTE_DURATION_MS;
-        this.lastVotedOptionId = null;
-        this.consecutiveVotesCount = 0;
-        this.voterChoices.clear();
-        this.roundChatters.clear();
-
-        // Pick 3 random options, one per category
+    /** Picks the voting triple: director-aware selection, one effect per category */
+    private buildVotingTriple() {
         const excluded = this.getExcludedIds();
         const mercy = this.isMercyActive();
         if (mercy) {
@@ -284,6 +343,24 @@ export class VotingManager extends EventEmitter {
             votes: 0,
             category: effect.category
         }));
+    }
+
+    private startVote() {
+        if (this.timer) { clearInterval(this.timer); this.timer = null; }
+        if (this.cooldownTimer) { clearTimeout(this.cooldownTimer); this.cooldownTimer = null; }
+        if (this.interventionTimer) { clearTimeout(this.interventionTimer); this.interventionTimer = null; }
+        this.isActive = true;
+        this.roundNumber++;
+
+        this.interventionState = null;
+        this.timeRemainingMs = this.VOTE_DURATION_MS;
+        this.lastVotedOptionId = null;
+        this.consecutiveVotesCount = 0;
+        this.voterChoices.clear();
+        this.roundChatters.clear();
+        this.rerollUsedThisRound = false;
+
+        this.buildVotingTriple();
 
         sysLogger.info(`Round #${this.roundNumber} started. Options:`, this.options.map(o => o.displayName));
 
@@ -446,8 +523,22 @@ export class VotingManager extends EventEmitter {
 
         if (winner.isMega) {
             winner.effectId = 'MEGA_' + winner.effectId;
+            this.megaMoments.push(winner.displayName);
         }
-        this.emit('vote:end', { winner, state: this.getState() });
+
+        // Karma economy: a purchased shield cancels the incoming hostile effect once
+        let shieldedBy: string | null = null;
+        if (winnerCategory !== 'positive') {
+            shieldedBy = this.consumeShieldIfAny();
+        }
+
+        if (shieldedBy) {
+            sysLogger.info(`[Karma] Shield from ${shieldedBy} cancelled hostile winner [${winner.displayName}].`);
+            this.emit('vote:shielded', { by: shieldedBy, cancelled: winner.displayName });
+            this.emit('vote:end', { winner: null, shieldedBy, cancelled: winner.displayName, state: this.getState() });
+        } else {
+            this.emit('vote:end', { winner, state: this.getState() });
+        }
 
         // Start cooldown, then start next cycle
         this.cooldownTimer = setTimeout(() => {
