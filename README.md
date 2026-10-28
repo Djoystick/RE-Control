@@ -9,7 +9,7 @@
   </p>
 
   <p align="center">
-    <a href="https://github.com/Djoystick/RE-Control/releases"><img src="https://img.shields.io/badge/Release-v1.4.0-red?style=for-the-badge&logo=github" alt="Release v1.4.0" /></a>
+    <a href="https://github.com/Djoystick/RE-Control/releases"><img src="https://img.shields.io/badge/Release-v1.4.1-red?style=for-the-badge&logo=github" alt="Release v1.4.1" /></a>
     <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-39-47848F?style=for-the-badge&logo=electron&logoColor=white" alt="Electron 39" /></a>
     <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React 19" /></a>
     <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5" /></a>
@@ -58,7 +58,7 @@
 - 🧩 **Единый реестр эффектов:** пул голосования, плитки Web Remote и справка бота генерируются из одного `effects-registry.ts`; `npm run check:effects` сверяет его с Lua и блокирует рассинхрон.
 - 💬 **Чат-команды бота:** `!karma` / `!me` — своя карма, `!top` — лидерборд, `!effects` — список эффектов, `!help` — справка. Между раундами чат не молчит.
 - 🆘 **Аварийная остановка (Panic Hotkey):** Горячая клавиша `Ctrl+Shift+P` (настраивается) мгновенно сбрасывает все активные эффекты в игре (TimeScale, FOV, слепота, помехи), останавливает голосование и замораживает автопилот — с уведомлением в чат. Стример всегда держит ситуацию под контролем.
-- 🎙️ **Студийная озвучка (Umbrella AI & Ally):** Настоящие голоса актёров озвучки, синхронизированные аркадные субтитры и воспроизведение без сторонних микшеров.
+- 🎙️ **Студийная озвучка + TTS-фолбэк:** актёрские записи остаются основным голосом проекта (синхронизированные аркадные субтитры, воспроизведение без сторонних микшеров). Если файлов нет — реплики синтезируются Edge TTS (`ru-RU-DmitryNeural` / `ru-RU-SvetlanaNeural`), кэшируются на диск и дальше играют офлайн. Актёрские записи всегда в приоритете.
 - ⚡ **Event Loop Protection & SQLite WAL:** Батчинг записи кармы зрителей раз в 300 мс в единой транзакции исключает лаги и подвисания интерфейса при спаме в чате.
 - 🛡️ **Комплексная безопасность (Zero-Trust):** Аппаратное шифрование OAuth токенов через Windows DPAPI (`safeStorage`), Bearer-токенизация веб-контура, Rate Limiting, защита от DoS (64KB payload cap, WS backpressure) и Path Traversal.
 
@@ -291,7 +291,7 @@ flowchart TB
 - **Мод-лоадер:** [REFramework](https://github.com/praydog/REFramework) (устанавливается автоматически через наш Setup Wizard)
 - **Среда разработки:** Node.js 18+ LTS и npm
 
-> 🎙️ **Озвучка:** актёрские реплики (Umbrella HQ / Союзник / Предатель) лежат в `assets/audio/` и распространяются **вне git-репозитория**. После клонирования репозитория звука не будет — приложение продолжит работать, просто без голосов. Файлы подключаются в собранный дистрибутив автоматически (`extraResources` в `electron-builder.yml`).
+> 🎙️ **Озвучка:** актёрские реплики (Umbrella HQ / Союзник / Предатель) лежат в `assets/audio/` и распространяются **вне git-репозитория**; в собранный дистрибутив они попадают автоматически (`extraResources` в `electron-builder.yml`). После клонирования репозитория вместо тишины работает **TTS-фолбэк**: нужен Python 3 + `pip install edge-tts` (проверка и прогрев кэша — во вкладке «ОПЦИИ» → «СИНТЕЗ РЕЧИ»). Без Python реплики показываются субтитрами без звука.
 
 > 🕹️ **Без игры тоже работает:** вкладки CONTROL / TIERS / ТЕСТЫ и симулятор чата полностью функциональны без запущенной игры — можно посмотреть механики голосований и интервенций до покупки RE2.
 
@@ -362,6 +362,7 @@ RE:Control содержит встроенный сервер оверлея, к
 - [x] **Этап 4.5 (Sprint 3):** 100% закрытие аудита безопасности — устранение DoS уязвимостей, Rate Limiter, WS backpressure, блокировка Path Traversal, очистка дерева зависимостей на 58%.
 - [x] **Этап 4.6 (v1.3.0):** Директор ивента (Adaptive Pacing), чат-команды бота (`!karma` / `!top` / `!effects` / `!help`), аварийная остановка (Panic Hotkey `Ctrl+Shift+P`).
 - [x] **Этап 4.7 (v1.4.0):** Единый реестр эффектов + сверка с Lua, карма-экономика (`!shield` / `!reroll` / `!report`), пост-стрим виджет в оверлее, 29 юнит-тестов и CI.
+- [x] **Этап 4.8 (v1.4.1):** TTS-фолбэк озвучки (Edge TTS + дисковый кэш + прогрев), реестр реплик с 14 событиями, mime-тип аудио в оверлее, UI-блок «СИНТЕЗ РЕЧИ».
 - [ ] **Этап 5:** Реальное подключение Twitch EventSub & DonationAlerts WebSockets по OAuth токену + проброс конфигурации тиров (вкладка TIERS) в логику донатов бэкенда.
 - [ ] **Этап 6:** Мульти-игровые профили движка (RE3 Remake, RE4 Remake, Monster Hunter).
 - [ ] **Этап 7:** Публичный инсталлятор (.exe) с автоматическим обновлением (Auto-Updater).

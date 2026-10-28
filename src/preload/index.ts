@@ -88,6 +88,10 @@ const api = {
   getOverlayUrl: () => ipcRenderer.invoke('obs:getOverlayUrl'),
   getDirectorConfig: () => ipcRenderer.invoke('settings:getDirector'),
   saveDirectorConfig: (config: any) => ipcRenderer.invoke('settings:saveDirector', config),
+  getTtsConfig: () => ipcRenderer.invoke('tts:getConfig'),
+  setTtsConfig: (patch: any) => ipcRenderer.invoke('tts:setConfig', patch),
+  getTtsStatus: () => ipcRenderer.invoke('tts:getStatus'),
+  warmTtsCache: () => ipcRenderer.invoke('tts:warmCache'),
   onObsStatus: (cb: (data: { connected: boolean; count: number }) => void) => {
     const handler = (_: any, d: any) => cb(d)
     ipcRenderer.on('obs:status', handler)

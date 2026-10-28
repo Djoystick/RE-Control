@@ -46,6 +46,10 @@ declare global {
       getOverlayUrl: () => Promise<string>
       getDirectorConfig: () => Promise<any>
       saveDirectorConfig: (config: any) => Promise<any>
+      getTtsConfig: () => Promise<{ enabled: boolean; pythonCommand?: string }>
+      setTtsConfig: (patch: any) => Promise<any>
+      getTtsStatus: () => Promise<{ enabled: boolean; available: boolean }>
+      warmTtsCache: () => Promise<{ generated: number; total: number }>
       onObsStatus: (cb: (data: { connected: boolean; count: number }) => void) => () => void
       getRemoteInfo: () => Promise<{ url: string; qr: string; clients: number }>
       triggerEffect: (effectId: string) => Promise<string>

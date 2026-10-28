@@ -9,7 +9,8 @@ import { TwitchBridge } from './chat-bridge/TwitchBridge'
 import { DonationBridge } from './chat-bridge/DonationBridge'
 import { REBridge } from './game-bridge/REBridge'
 import { VotingManager } from './game-bridge/VotingManager'
-import { narrator, getAudioBasePath } from './ai-narrator/Narrator'
+import { narrator, getAudioBasePath, getAllLines } from './ai-narrator/Narrator'
+import { ttsService } from './ai-narrator/TTSService'
 import { sysLogger } from './utils/logger'
 import { dbManager } from './db/DatabaseManager'
 import { SUPPORTED_GAMES } from './setup/GameDatabase'
@@ -90,6 +91,7 @@ function createWindow(): void {
     overlayServer.broadcast('effect:end', {});
     overlayServer.broadcast('vote:update', { isActive: false, options: [], timeRemainingMs: 0, totalVotes: 0 });
     mainWindow.webContents.send('simulator:syslog', { message: 'PANIC STOP: все эффекты сброшены, автопилот остановлен.' });
+    narrator.say('panic');
     if (activeTwitchChannel) {
       twitchBridge.sendMessage(activeTwitchChannel, '☣️ [UMBRELLA CORP] ⏸ АВАРИЙНАЯ ОСТАНОВКА. Все активные протоколы деактивированы.');
     }
@@ -414,6 +416,25 @@ function createWindow(): void {
     }
   })
 
+  // Narrator: sfx for the new director events (v1.4.1)
+  votingManager.on('director:mercy', () => {
+    narrator.say('director_mercy')
+  })
+
+  votingManager.on('director:pulse', () => {
+    narrator.say('director_pulse')
+  })
+
+  votingManager.on('mega:unlock', ({ displayName }) => {
+    narrator.say('mega_unlock')
+    mainWindow.webContents.send('simulator:syslog', { message: `MEGA UNLOCKED: ${displayName}` })
+    overlayServer.broadcast('mega:unlock', { displayName })
+  })
+
+  votingManager.on('vote:shielded', () => {
+    narrator.say('shield_saved')
+  })
+
   narrator.on('narrator:speak', (data) => {
     overlayServer.broadcast('narrator:speak', data)
     mainWindow.webContents.send('narrator:speak', data)
@@ -422,6 +443,35 @@ function createWindow(): void {
   narrator.on('narrator:audio', (data) => {
     overlayServer.broadcast('narrator:audio', data)
   })
+
+  // Subtitle-only fallback when neither actor files nor TTS are available
+  narrator.on('narrator:subtitle', (data) => {
+    overlayServer.broadcast('narrator:speak', data)
+    mainWindow.webContents.send('narrator:speak', data)
+  })
+
+  // ─── TTS FALLBACK (v1.4.1) ───
+  ttsService.loadConfig()
+
+  ipcMain.handle('tts:getConfig', () => ttsService.getConfig())
+  ipcMain.handle('tts:setConfig', (_, patch) => ttsService.setConfig(patch))
+  ipcMain.handle('tts:getStatus', async () => ({
+    enabled: ttsService.isEnabled(),
+    available: await ttsService.checkAvailability()
+  }))
+  ipcMain.handle('tts:warmCache', async () => {
+    const generated = await ttsService.warmCache(getAllLines())
+    return { generated, total: getAllLines().length }
+  })
+
+  // Warm the cache in the background so the first line plays instantly
+  setTimeout(() => {
+    if (ttsService.isEnabled()) {
+      ttsService.warmCache(getAllLines()).catch((err) => {
+        sysLogger.warn(`[TTS] Warm-up failed: ${err.message}`)
+      })
+    }
+  }, 5000)
 
   ipcMain.on('narrator:toggle', (_, val: boolean) => {
     narrator.setEnabled(val)

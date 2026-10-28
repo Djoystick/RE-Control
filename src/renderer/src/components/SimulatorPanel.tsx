@@ -80,6 +80,9 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
     winnerCooldownRounds: 2,
     unseenThreshold: 2
   })
+  const [ttsConfig, setTtsConfig] = useState({ enabled: true })
+  const [ttsStatus, setTtsStatus] = useState<{ enabled: boolean; available: boolean } | null>(null)
+  const [ttsWarm, setTtsWarm] = useState<string>('')
   const [remoteInfo, setRemoteInfo] = useState<{ url: string; qr: string; clients: number } | null>(null)
   const [copiedRemote, setCopiedRemote] = useState<boolean>(false)
   const [testSuccessEffect, setTestSuccessEffect] = useState<string | null>(null)
@@ -106,6 +109,10 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
 
     window.api?.getDirectorConfig?.().then((d: any) => {
       if (d) setDirector((prev) => ({ ...prev, ...d }))
+    })
+
+    window.api?.getTtsConfig?.().then((c: any) => {
+      if (c) setTtsConfig((prev) => ({ ...prev, ...c }))
     })
 
     window.api?.getVolume?.().then((v: number) => {
@@ -1301,6 +1308,56 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
                   <div>Протокол связи: IPC WebSocket + Memory Mapped Files</div>
                   <div>Порт веб-сервера: 27016</div>
                 </div>
+
+                <h3 className="text-xs font-bold text-amber-300 uppercase font-mono border-b border-[#1e2332] pb-2 pt-1">
+                  СИНТЕЗ РЕЧИ (TTS-ФОЛБЭК)
+                </h3>
+                <label className="flex items-center gap-2 text-[10px] text-zinc-300 font-bold uppercase cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="accent-amber-500"
+                    checked={ttsConfig.enabled}
+                    onChange={(e) => {
+                      const patch = { ...ttsConfig, enabled: e.target.checked }
+                      setTtsConfig(patch)
+                      window.api?.setTtsConfig?.(patch)
+                    }}
+                  />
+                  Озвучивать реплики при отсутствии актёрских файлов
+                </label>
+                <div className="text-[9px] text-zinc-500 font-mono leading-relaxed">
+                  Использует Edge TTS (ru-RU, нейро-голоса Microsoft) при наличии Python + пакета edge-tts.
+                  Если актёрская запись найдена в assets/audio — играет она, TTS не используется.
+                  Сгенерированные реплики кэшируются и работают офлайн.
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="flex-1 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/70 text-amber-200 text-[10px] uppercase font-mono font-bold py-1.5 rounded transition-colors"
+                    onClick={async () => {
+                      const status = await window.api?.getTtsStatus?.()
+                      setTtsStatus(status ?? null)
+                    }}
+                  >
+                    ПРОВЕРИТЬ ДОСТУПНОСТЬ
+                  </button>
+                  <button
+                    className="flex-1 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/70 text-amber-200 text-[10px] uppercase font-mono font-bold py-1.5 rounded transition-colors"
+                    onClick={async () => {
+                      const res = await window.api?.warmTtsCache?.()
+                      if (res) setTtsWarm(`${res.generated}/${res.total}`)
+                    }}
+                  >
+                    ПРОГРЕТЬ КЭШ
+                  </button>
+                </div>
+                {ttsStatus && (
+                  <div className={`text-[10px] font-mono ${ttsStatus.available ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {ttsStatus.available ? '✔ edge-tts доступен' : '✖ edge-tts не найден (нужен Python + pip install edge-tts)'}
+                  </div>
+                )}
+                {ttsWarm && (
+                  <div className="text-[10px] font-mono text-amber-300">Кэш: {ttsWarm} реплик готово</div>
+                )}
               </div>
 
               <button

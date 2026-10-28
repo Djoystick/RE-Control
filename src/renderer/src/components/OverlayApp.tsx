@@ -30,9 +30,9 @@ interface EffectState {
 const activeAudios = new Set<HTMLAudioElement>();
 let overlayVolume = 0.8;
 
-async function playFilteredAudio(base64: string, _type: string, volume?: number) {
+async function playFilteredAudio(base64: string, mime: string = 'audio/ogg', volume?: number) {
     return new Promise<void>((resolve, reject) => {
-        const audio = new Audio(`data:audio/ogg;base64,${base64}`);
+        const audio = new Audio(`data:${mime};base64,${base64}`);
         const finalVol = typeof volume === 'number' ? volume : overlayVolume;
         audio.volume = Math.max(0, Math.min(1, finalVol));
         activeAudios.add(audio);
@@ -114,7 +114,7 @@ export default function OverlayApp() {
             setNarratorData({ text: msg.data.subtitle, type: msg.data.type })
             clearTimeout(narratorDataTimer)
             narratorDataTimer = setTimeout(() => setNarratorData(null), 6000)
-            playFilteredAudio(msg.data.base64, msg.data.type, msg.data.volume).catch(e => setNarratorData({ text: 'AUDIO ERROR: ' + e.message, type: 'veto' }))
+            playFilteredAudio(msg.data.base64, msg.data.mime || 'audio/ogg', msg.data.volume).catch(e => setNarratorData({ text: 'AUDIO ERROR: ' + e.message, type: 'veto' }))
           } else if (msg.type === 'narrator:speak') {
             setNarratorData({ text: msg.data.text, type: msg.data.type || 'veto' })
             clearTimeout(narratorTimer)

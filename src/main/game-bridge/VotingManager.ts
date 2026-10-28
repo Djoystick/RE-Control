@@ -174,7 +174,10 @@ export class VotingManager extends EventEmitter {
         if (!this.isActive) return;
         const quiet = this.isCrowdQuiet();
         const chance = quiet ? this.director.quietInterventionChance : 0.3;
-        if (!quiet && this.director.enabled) {
+        if (quiet) {
+            sysLogger.info(`[Director] Crowd pulse: ${this.voterChoices.size}/${this.roundChatters.size} chatters voting — quiet crowd, boosting intervention chance to ${Math.round(chance * 100)}%.`);
+            this.emit('director:pulse', { voters: this.voterChoices.size, chatters: this.roundChatters.size });
+        } else {
             sysLogger.info(`[Director] Crowd pulse: ${this.voterChoices.size}/${this.roundChatters.size} chatters voting — engagement healthy, fair dice.`);
         }
         this.rollIntervention(false, chance);
@@ -317,6 +320,7 @@ export class VotingManager extends EventEmitter {
                 pickOne('psychological')
             ].filter(Boolean) as PoolEffect[];
             sysLogger.info('[Director] Mercy round: extra positive effect injected into the triple.');
+            this.emit('director:mercy', { negativeWinStreak: this.negativeWinStreak });
         } else {
             selectedEffects = [
                 pickOne('positive'),
@@ -473,6 +477,7 @@ export class VotingManager extends EventEmitter {
                     if (this.consecutiveVotesCount >= 5 && !option.isMega) {
                         option.isMega = true;
                         sysLogger.info(`🔥 MEGA STATUS UNLOCKED for [${option.displayName}] (5 consecutive votes)!`);
+                        this.emit('mega:unlock', { optionId: option.id, displayName: option.displayName });
                     }
                 } else {
                     this.lastVotedOptionId = option.id;
