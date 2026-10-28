@@ -1,4 +1,4 @@
-﻿import * as fs from 'fs';
+import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
 
@@ -6,8 +6,9 @@ class Logger {
     private logFile: string;
 
     constructor() {
-        // In dev, use project root. In prod, use appData.
-        this.logFile = path.join(app.isPackaged ? app.getPath('userData') : process.cwd(), 're_control_system.log');
+        // In dev or non-electron test env, use project root. In prod, use appData.
+        const basePath = app && typeof app.getPath === 'function' && app.isPackaged ? app.getPath('userData') : process.cwd();
+        this.logFile = path.join(basePath, 're_control_system.log');
         // Clear log on startup
         fs.writeFileSync(this.logFile, '=== RE:CONTROL LOG STARTED AT ' + new Date().toISOString() + ' ===\n');
     }

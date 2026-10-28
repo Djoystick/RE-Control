@@ -50,6 +50,10 @@ export class Installer {
   }): Promise<void> {
     const { gamePath, archiveName, onProgress } = options;
 
+    if (path.basename(archiveName) !== archiveName) {
+      throw new Error(`Недопустимое имя архива: ${archiveName}`);
+    }
+
     // 10% — Verify game path
     onProgress(10, 'Проверка папки игры...');
     if (!fs.existsSync(gamePath)) {
@@ -68,17 +72,28 @@ export class Installer {
     onProgress(40, 'Открытие архива...');
     const archivePath = path.join(getFrameworksPath(), archiveName);
     if (!fs.existsSync(archivePath)) {
+      if (fs.existsSync(dinputBakPath) && !fs.existsSync(dinputPath)) {
+        fs.renameSync(dinputBakPath, dinputPath);
+      }
       throw new Error(`Архив не найден: ${archivePath}`);
     }
     const zip = new AdmZip(archivePath);
 
-    // 80% — Extract
-    onProgress(80, 'Распаковка файлов...');
-    zip.extractAllTo(gamePath, /* overwrite */ true);
+    try {
+      // 80% — Extract
+      onProgress(80, 'Распаковка файлов...');
+      zip.extractAllTo(gamePath, /* overwrite */ true);
 
-    // 90% — Copy Lua scripts
-    onProgress(90, 'Копирование Lua-скриптов...');
-    await this._copyLuaScripts(gamePath);
+      // 90% — Copy Lua scripts
+      onProgress(90, 'Копирование Lua-скриптов...');
+      await this._copyLuaScripts(gamePath);
+    } catch (err) {
+      // Rollback dinput8.dll if extraction failed
+      if (fs.existsSync(dinputBakPath) && !fs.existsSync(dinputPath)) {
+        try { fs.renameSync(dinputBakPath, dinputPath); } catch {}
+      }
+      throw err;
+    }
 
     // 100% — Save config
     onProgress(100, 'Установка завершена!');

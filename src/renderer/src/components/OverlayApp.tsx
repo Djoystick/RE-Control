@@ -70,9 +70,17 @@ export default function OverlayApp() {
     let reconnectTimer: any;
     let bannerTimer: any;
     let narratorTimer: any;
+    let narratorDataTimer: any;
+    let effectTimer: any;
     
     const connect = () => {
-      ws = new WebSocket('ws://localhost:27016')
+      const loc = window.location;
+      const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = loc.host || '127.0.0.1:27016';
+      const params = new URLSearchParams(loc.search);
+      const token = params.get('token');
+      const wsUrl = `${protocol}//${host}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      ws = new WebSocket(wsUrl);
       
       ws.onmessage = (event) => {
         try {
@@ -83,7 +91,7 @@ export default function OverlayApp() {
           } else if (msg.type === 'vote:end') {
             setVoteState(null)
             setInterventionBanner(null)
-                    } else if (msg.type === 'vote:intervention') {
+          } else if (msg.type === 'vote:intervention') {
             setInterventionBanner(msg.data)
             clearTimeout(bannerTimer)
             bannerTimer = setTimeout(() => setInterventionBanner(null), 8000)
@@ -93,7 +101,8 @@ export default function OverlayApp() {
             }
           } else if (msg.type === 'narrator:audio') {
             setNarratorData({ text: msg.data.subtitle, type: msg.data.type })
-            setTimeout(() => setNarratorData(null), 6000)
+            clearTimeout(narratorDataTimer)
+            narratorDataTimer = setTimeout(() => setNarratorData(null), 6000)
             playFilteredAudio(msg.data.base64, msg.data.type, msg.data.volume).catch(e => setNarratorData({ text: 'AUDIO ERROR: ' + e.message, type: 'veto' }))
           } else if (msg.type === 'narrator:speak') {
             setNarratorData({ text: msg.data.text, type: msg.data.type || 'veto' })
@@ -102,10 +111,12 @@ export default function OverlayApp() {
           } else if (msg.type === 'effect:start') {
             setActiveEffect(msg.data)
             // Auto hide effect after its duration
-            setTimeout(() => {
+            clearTimeout(effectTimer)
+            effectTimer = setTimeout(() => {
               setActiveEffect(null)
             }, msg.data.duration || 10000)
           } else if (msg.type === 'effect:end') {
+            clearTimeout(effectTimer)
             setActiveEffect(null)
           }
         } catch (e) {
@@ -122,6 +133,10 @@ export default function OverlayApp() {
     
     return () => {
       clearTimeout(reconnectTimer)
+      clearTimeout(bannerTimer)
+      clearTimeout(narratorTimer)
+      clearTimeout(narratorDataTimer)
+      clearTimeout(effectTimer)
       if (ws) ws.close()
       
       activeAudios.forEach(audio => {

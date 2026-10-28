@@ -10,6 +10,7 @@ export interface GameConfig {
   steamAppId: string;
   exeName: string;
   variants: GameVariant[];
+  status?: 'supported' | 'coming_soon';
 }
 
 export const SUPPORTED_GAMES: GameConfig[] = [
@@ -18,6 +19,7 @@ export const SUPPORTED_GAMES: GameConfig[] = [
     displayName: 'Resident Evil 2 (2019)',
     steamAppId: '883710',
     exeName: 're2.exe',
+    status: 'supported',
     variants: [
       { label: 'Стандартная', archiveName: 'RE2.zip' },
       {
@@ -32,6 +34,7 @@ export const SUPPORTED_GAMES: GameConfig[] = [
     displayName: 'Resident Evil 3 (2020)',
     steamAppId: '952060',
     exeName: 're3.exe',
+    status: 'coming_soon',
     variants: [
       { label: 'Стандартная', archiveName: 'RE3.zip' },
       {
@@ -46,6 +49,7 @@ export const SUPPORTED_GAMES: GameConfig[] = [
     displayName: 'Resident Evil 4 (2023)',
     steamAppId: '2050650',
     exeName: 're4.exe',
+    status: 'coming_soon',
     variants: [{ label: 'Стандартная', archiveName: 'RE4.zip' }]
   },
   {
@@ -53,6 +57,7 @@ export const SUPPORTED_GAMES: GameConfig[] = [
     displayName: 'Resident Evil 7',
     steamAppId: '418370',
     exeName: 're7.exe',
+    status: 'coming_soon',
     variants: [
       { label: 'Стандартная', archiveName: 'RE7.zip' },
       {
@@ -67,6 +72,7 @@ export const SUPPORTED_GAMES: GameConfig[] = [
     displayName: 'Resident Evil Village',
     steamAppId: '1196590',
     exeName: 're8.exe',
+    status: 'coming_soon',
     variants: [{ label: 'Стандартная', archiveName: 'RE8.zip' }]
   },
   {
@@ -74,6 +80,7 @@ export const SUPPORTED_GAMES: GameConfig[] = [
     displayName: 'Devil May Cry 5',
     steamAppId: '601150',
     exeName: 'DevilMayCry5.exe',
+    status: 'coming_soon',
     variants: [{ label: 'Стандартная', archiveName: 'DMC5.zip' }]
   },
   {
@@ -81,6 +88,7 @@ export const SUPPORTED_GAMES: GameConfig[] = [
     displayName: "Dragon's Dogma 2",
     steamAppId: '2054970',
     exeName: 'DD2.exe',
+    status: 'coming_soon',
     variants: [{ label: 'Стандартная', archiveName: 'DD2.zip' }]
   },
   {
@@ -88,6 +96,7 @@ export const SUPPORTED_GAMES: GameConfig[] = [
     displayName: 'Monster Hunter Rise',
     steamAppId: '1446780',
     exeName: 'MonsterHunterRise.exe',
+    status: 'coming_soon',
     variants: [{ label: 'Стандартная', archiveName: 'MHRISE.zip' }]
   },
   {
@@ -95,6 +104,7 @@ export const SUPPORTED_GAMES: GameConfig[] = [
     displayName: 'Monster Hunter Wilds',
     steamAppId: '2246340',
     exeName: 'MonsterHunterWilds.exe',
+    status: 'coming_soon',
     variants: [{ label: 'Стандартная', archiveName: 'MHWILDS.zip' }]
   },
   {
@@ -102,6 +112,7 @@ export const SUPPORTED_GAMES: GameConfig[] = [
     displayName: 'Street Fighter 6',
     steamAppId: '1794680',
     exeName: 'StreetFighter6.exe',
+    status: 'coming_soon',
     variants: [{ label: 'Стандартная', archiveName: 'SF6.zip' }]
   }
 ];

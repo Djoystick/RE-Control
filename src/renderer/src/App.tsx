@@ -38,54 +38,55 @@ function App() {
           {/* WINDOW CONTROLS */}
           <div className="absolute top-[28px] right-[40px] flex gap-2 z-50">
             <button 
-              className="no-drag w-7 h-7 flex items-center justify-center bg-pixel-panel border border-pixel-cyan/50 text-pixel-cyan hover:bg-pixel-cyan hover:text-pixel-void rounded shadow-[0_2px_4px_rgba(0,0,0,0.5)] transition-colors"
+              className="no-drag w-7 h-7 flex items-center justify-center bg-[#10121a] border border-[#262c3e] text-zinc-400 hover:bg-[#181c28] hover:text-zinc-100 rounded transition-colors"
               onClick={() => (window as any).api.minimizeWindow()}
+              title="Свернуть"
             >
-              <Minus size={16} strokeWidth={3} />
+              <Minus size={15} strokeWidth={2.5} />
             </button>
             <button 
-              className="no-drag w-7 h-7 flex items-center justify-center bg-pixel-panel border border-pixel-danger/50 text-pixel-danger hover:bg-pixel-danger hover:text-pixel-void rounded shadow-[0_2px_4px_rgba(0,0,0,0.5)] transition-colors"
+              className="no-drag w-7 h-7 flex items-center justify-center bg-[#10121a] border border-red-950/80 hover:border-red-800/80 text-red-500 hover:bg-red-950/40 hover:text-red-300 rounded transition-colors"
               onClick={() => (window as any).api.closeWindow()}
+              title="Закрыть"
             >
-              <X size={16} strokeWidth={3} />
+              <X size={15} strokeWidth={2.5} />
             </button>
           </div>
 
           {/* TOP HARDWARE TITLE */}
           <div className="absolute top-[28px] left-0 w-full flex justify-center pointer-events-none z-50">
-             <div className="px-6 py-1 bg-[#10121d] border-b-2 border-pixel-cyan/30 rounded-b-xl shadow-[0_4px_10px_rgba(0,0,0,0.5)] flex items-center gap-3">
-               <div className="flex items-end gap-[2px] h-4">
+             <div className="px-5 py-1 bg-[#0b0d13] border-b border-red-950/80 rounded-b-lg shadow-[0_4px_12px_rgba(0,0,0,0.8)] flex items-center gap-3">
+               <div className="flex items-end gap-[2px] h-3.5">
                  {[1, 2, 3, 4].map((i) => (
                    <motion.div
                      key={`eq-${i}`}
-                     className="w-1.5 bg-pixel-cyan/80 rounded-t-[1px]"
-                     animate={{ height: ["30%", "100%", "40%", "90%", "30%"] }}
+                     className="w-1 bg-red-600/70 rounded-t-[1px]"
+                     animate={{ height: ["25%", "90%", "35%", "80%", "25%"] }}
                      transition={{ 
-                       duration: 0.6 + (i * 0.1), 
+                       duration: 0.7 + (i * 0.12), 
                        repeat: Infinity, 
                        repeatType: "mirror"
                      }}
                    />
                  ))}
                </div>
-               <h1 className="text-xl text-pixel-light/90 tracking-[0.25em] font-pixel drop-shadow-[0_2px_4px_rgba(65,166,246,0.6)] animate-pulse">
-                  RE:<span className="text-pixel-danger font-bold">CONTROL</span>
+               <h1 className="text-base text-zinc-200 tracking-[0.25em] font-mono font-bold drop-shadow-[0_2px_4px_rgba(220,38,38,0.3)]">
+                  RE:<span className="text-red-600 font-bold">CONTROL</span>
                </h1>
              </div>
           </div>
 
           {/* SCREEN SAFE ZONE - Perfectly sized to fit inside the CRT bezel */}
           <div className="absolute top-[75px] bottom-[55px] left-[40px] right-[40px] flex flex-col z-10">
-            <div className="rc-screen no-drag w-full h-full flex flex-col relative rounded-md overflow-hidden">
+            <div className="rc-screen no-drag w-full h-full flex flex-col relative rounded-md overflow-hidden bg-[#0a0c10]">
               <div className="absolute inset-0 pointer-events-none opacity-20 z-0" 
                    style={{ background: 'linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.4) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.04))', backgroundSize: '100% 4px, 6px 100%' }} />
               
-              <div className="rc-content relative z-10 w-full h-full flex flex-col p-2">
+              <div className="rc-content relative z-10 w-full h-full flex flex-col p-1.5">
                  {!isLoading && (
                    setupDone ? (
                      <>
                        <SimulatorPanel onReinstall={() => setSetupDone(false)} />
-                       
                      </>
                    ) : (
                      <SetupWizard onComplete={() => setSetupDone(true)} />
@@ -96,13 +97,13 @@ function App() {
           </div>
 
           {/* STATUS BAR - Safely positioned on the physical flat part of the bottom bezel */}
-          <div className="absolute bottom-[38px] left-[70px] right-[70px] flex justify-between items-center text-[11px] sm:text-xs text-pixel-light/80 tracking-widest pointer-events-none z-50">
+          <div className="absolute bottom-[38px] left-[70px] right-[70px] flex justify-between items-center text-[10px] text-zinc-400 tracking-wider pointer-events-none z-50 font-mono">
             <div className="flex items-center gap-2 drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">
-              <span className="rec-dot w-2 h-2 rounded-full bg-pixel-danger animate-ping shadow-[0_0_8px_var(--rc-red)]"></span>
-              STATUS: <b className="text-pixel-amber ml-1 drop-shadow-[0_0_6px_rgba(255,205,117,0.5)] font-heading tracking-wider">LINK ESTABLISHED</b>
+              <span className="w-2 h-2 rounded-full bg-red-600 shadow-[0_0_6px_rgba(220,38,38,0.8)]"></span>
+              STATUS: <b className="text-zinc-200 ml-1 font-mono tracking-wider">SYSTEM ACTIVE</b>
             </div>
             <div className="flex items-center gap-2 drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">
-              TARGET: <b className="text-pixel-cyan ml-1 drop-shadow-[0_0_6px_rgba(65,166,246,0.5)] font-heading tracking-wider">RESIDENT EVIL 2</b>
+              TARGET: <b className="text-red-400 ml-1 font-mono tracking-wider">RESIDENT EVIL 2</b>
             </div>
           </div>
             

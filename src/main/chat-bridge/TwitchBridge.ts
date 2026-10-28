@@ -5,6 +5,9 @@ import fs from 'fs';
 import { join } from 'path';
 
 export class TwitchBridge implements IChatBridge {
+    public isMod: boolean = false;
+    public botUsername: string = '';
+    private statusCallback: ((status: any) => void) | null = null;
     private client: tmi.Client | null = null;
     public isBotAuthenticated: boolean = false;
     private commandCallback: ((cmd: ChatCommand) => void) | null = null;
@@ -28,6 +31,8 @@ export class TwitchBridge implements IChatBridge {
                     identity = { username: config.username, password: token };
                     this.isBotAuthenticated = true;
                 }
+                // Set botUsername from config
+                this.botUsername = config.username || '';
             } catch (e) {
                 console.error('Failed to parse twitch config', e);
             }
@@ -64,6 +69,38 @@ export class TwitchBridge implements IChatBridge {
                 });
             }
         });
+
+        // Additional event listeners
+        (this.client as any).on('userstate', (_channel: string, userstate: any) => {
+            const isModerator = !!(userstate?.mod || userstate?.['user-type'] === 'mod' || userstate?.badges?.moderator);
+            this.isMod = isModerator;
+            if (this.statusCallback) this.statusCallback(this.getStatus());
+        });
+
+        this.client.on('mods', (_channel: string, mods: string[]) => {
+            if (this.botUsername && mods.map(m => m.toLowerCase()).includes(this.botUsername.toLowerCase())) {
+                this.isMod = true;
+                if (this.statusCallback) this.statusCallback(this.getStatus());
+            }
+        });
+
+        this.client.on('mod', (_channel: string, username: string) => {
+            if (this.botUsername && username.toLowerCase() === this.botUsername.toLowerCase()) {
+                this.isMod = true;
+                if (this.statusCallback) this.statusCallback(this.getStatus());
+            }
+        });
+
+        this.client.on('unmod', (_channel: string, username: string) => {
+            if (this.botUsername && username.toLowerCase() === this.botUsername.toLowerCase()) {
+                this.isMod = false;
+                if (this.statusCallback) this.statusCallback(this.getStatus());
+            }
+        });
+
+        this.client.on('notice', (_channel: string, msgid: any, message: string) => {
+            console.warn('[Twitch Notice]:', msgid, message);
+        });
     }
 
     disconnect(): void {
@@ -71,6 +108,10 @@ export class TwitchBridge implements IChatBridge {
             this.client.disconnect().catch(console.error);
             this.client = null;
         }
+        // Reset state
+        this.isMod = false;
+        this.botUsername = '';
+        if (this.statusCallback) this.statusCallback(this.getStatus());
     }
 
     onCommand(callback: (cmd: ChatCommand) => void): void {
@@ -82,5 +123,30 @@ export class TwitchBridge implements IChatBridge {
             this.client.say(channel, message).catch(console.error);
         }
     }
-}
 
+    onStatusChange(callback: (status: any) => void): void {
+        this.statusCallback = callback;
+    }
+
+    getStatus() {
+        return {
+            connected: !!this.client,
+            botAuthenticated: this.isBotAuthenticated,
+            botUsername: this.botUsername,
+            isMod: this.isMod
+        };
+    }
+
+    async sendTestPing(channel: string): Promise<{ success: boolean; message?: string; error?: string }> {
+        if (!this.client || !this.isBotAuthenticated) {
+            return { success: false, error: 'Бот не авторизован (отсутствует токен бота)' };
+        }
+        try {
+            const msg = '☣️ [UMBRELLA CORP] Тестовый протокол связи успешен. Бот авторизован и готов к работе.';
+            await this.client.say(channel, msg);
+            return { success: true, message: msg };
+        } catch (err: any) {
+            return { success: false, error: err.message || 'Ошибка отправки тестового сообщения' };
+        }
+    }
+}

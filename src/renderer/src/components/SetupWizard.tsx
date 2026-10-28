@@ -14,6 +14,7 @@ interface GameConfig {
   steamAppId: string;
   exeName: string;
   variants: GameVariant[];
+  status?: 'supported' | 'coming_soon';
 }
 
 export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
@@ -120,7 +121,9 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                       }}
                     >
                       {games.map(g => (
-                        <option key={g.id} value={g.id}>{g.displayName}</option>
+                        <option key={g.id} value={g.id}>
+                          {g.displayName} {g.status === 'coming_soon' ? ' [В разработке]' : ' ✓'}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -148,12 +151,18 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                     </div>
                   )}
 
-                  <button 
-                    className="mt-4 w-full bg-pixel-cyan hover:bg-[#3498db] text-pixel-void font-bold py-2 border-2 border-pixel-light shadow-pixel hover:translate-y-[2px] transition-all hover:shadow-[0_0_15px_rgba(0,255,255,0.5)]"
-                    onClick={handleNextStep1}
-                  >
-                    Найти игру →
-                  </button>
+                  {selectedGame?.status === 'coming_soon' ? (
+                    <div className="mt-4 p-3 bg-[#302010] border border-pixel-amber rounded text-xs text-pixel-amber">
+                      ⚠ Поддержка игры {selectedGame.displayName} находится в разработке (Этап 6 Roadmap). Выберите Resident Evil 2 для стабильной работы моста.
+                    </div>
+                  ) : (
+                    <button 
+                      className="mt-4 w-full bg-pixel-cyan hover:bg-[#3498db] text-pixel-void font-bold py-2 border-2 border-pixel-light shadow-pixel hover:translate-y-[2px] transition-all hover:shadow-[0_0_15px_rgba(0,255,255,0.5)]"
+                      onClick={handleNextStep1}
+                    >
+                      Найти игру →
+                    </button>
+                  )}
                 </div>
               )}
 

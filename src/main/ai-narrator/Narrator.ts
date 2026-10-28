@@ -62,7 +62,7 @@ export class Narrator extends EventEmitter {
         return Date.now() - this.lastSpokenAt >= this.cooldownMs
     }
 
-    say(eventType: string) {
+    async say(eventType: string) {
         if (!this.canSpeak()) return
 
         const subfolder = SUBFOLDER_MAP[eventType]
@@ -73,12 +73,12 @@ export class Narrator extends EventEmitter {
         this.lastSpokenAt = Date.now()
         
         try {
-            
             let prefix = eventType;
             if (eventType === 'negative_win') prefix = 'neg';
             if (eventType === 'positive_win') prefix = 'pos';
             
-            const files = fs.readdirSync(folder).filter(f => 
+            const entries = await fs.promises.readdir(folder);
+            const files = entries.filter(f => 
                 (f.endsWith('.mp3') || f.endsWith('.wav') || f.endsWith('.ogg')) &&
                 f.startsWith(prefix)
             )
@@ -88,8 +88,8 @@ export class Narrator extends EventEmitter {
             const randomFile = files[Math.floor(Math.random() * files.length)]
             const filePath = join(folder, randomFile)
             
-            // Read file and convert to base64
-            const buffer = fs.readFileSync(filePath)
+            // Non-blocking async file read
+            const buffer = await fs.promises.readFile(filePath)
             const base64 = buffer.toString('base64')
             
             // Send directly to overlay to be played with VFX
