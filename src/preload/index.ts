@@ -92,6 +92,11 @@ const api = {
   setTtsConfig: (patch: any) => ipcRenderer.invoke('tts:setConfig', patch),
   getTtsStatus: () => ipcRenderer.invoke('tts:getStatus'),
   warmTtsCache: () => ipcRenderer.invoke('tts:warmCache'),
+  getObsMarkerConfig: () => ipcRenderer.invoke('obs:getMarkerConfig'),
+  setObsMarkerConfig: (patch: any) => ipcRenderer.invoke('obs:setMarkerConfig', patch),
+  testObsMarker: () => ipcRenderer.invoke('obs:testMarker'),
+  getSessionSnapshot: () => ipcRenderer.invoke('session:get'),
+  resetSession: () => ipcRenderer.invoke('session:reset'),
   onObsStatus: (cb: (data: { connected: boolean; count: number }) => void) => {
     const handler = (_: any, d: any) => cb(d)
     ipcRenderer.on('obs:status', handler)

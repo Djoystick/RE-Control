@@ -50,6 +50,11 @@ declare global {
       setTtsConfig: (patch: any) => Promise<any>
       getTtsStatus: () => Promise<{ enabled: boolean; available: boolean }>
       warmTtsCache: () => Promise<{ generated: number; total: number }>
+      getObsMarkerConfig: () => Promise<{ enabled: boolean; url: string; password: string }>
+      setObsMarkerConfig: (patch: any) => Promise<any>
+      testObsMarker: () => Promise<{ ok: boolean; connected: boolean }>
+      getSessionSnapshot: () => Promise<any>
+      resetSession: () => Promise<any>
       onObsStatus: (cb: (data: { connected: boolean; count: number }) => void) => () => void
       getRemoteInfo: () => Promise<{ url: string; qr: string; clients: number }>
       triggerEffect: (effectId: string) => Promise<string>

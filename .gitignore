@@ -36,3 +36,8 @@ fix_*.js
 append_sim.js
 categorize.js
 
+# Local runtime state
+session_state.json
+tts_config.json
+obs_config.json
+director_config.json

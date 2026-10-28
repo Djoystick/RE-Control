@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import { ChatCommand } from '../chat-bridge/IChatBridge';
 import { dbManager } from '../db/DatabaseManager';
 import { VOTABLE_EFFECTS, type EffectDef } from '../../shared/effects-registry';
+import { sessionStore, type DirectorSession } from './SessionStore';
 
 export interface VoteOption {
     id: number;
@@ -13,12 +14,25 @@ export interface VoteOption {
     isMega?: boolean;
 }
 
+export type RoundType = 'normal' | 'boss';
+
+export interface BossRoundInfo {
+    /** Голосов нужно набрать, чтобы эффект вообще сработал */
+    threshold: number;
+    /** Набрано голосов на момент завершения */
+    votes: number;
+    /** Прошёл ли порог */
+    passed: boolean;
+}
+
 export interface VoteState {
     isActive: boolean;
     options: VoteOption[];
     timeRemainingMs: number;
     totalVotes: number;
     intervention?: { type: string; message: string } | null;
+    roundType?: RoundType;
+    boss?: BossRoundInfo | null;
     director?: {
         mercyActive: boolean;
         pityBoostedIds: string[];
@@ -37,6 +51,10 @@ export interface DirectorConfig {
     winnerCooldownRounds: number;
     /** Below this many win-rounds an effect is "unseen" and gets a showcase boost */
     unseenThreshold: number;
+    /** Chance that a round becomes a boss round (0..1); 0 disables */
+    bossRoundChance: number;
+    /** Minimum distinct votes the chat must gather to beat a boss round */
+    bossThreshold: number;
 }
 
 const DEFAULT_DIRECTOR: DirectorConfig = {
@@ -45,7 +63,9 @@ const DEFAULT_DIRECTOR: DirectorConfig = {
     quietInterventionChance: 0.6,
     mercyStreak: 3,
     winnerCooldownRounds: 2,
-    unseenThreshold: 2
+    unseenThreshold: 2,
+    bossRoundChance: 0.1,
+    bossThreshold: 12
 };
 
 type PoolEffect = { id: string; name: string; category: string; winRounds?: number };
@@ -74,6 +94,10 @@ export class VotingManager extends EventEmitter {
     /** Unique chatters seen during the current vote (participation pulse) */
     private roundChatters = new Set<string>();
     private chatCommandHandler: ((command: string, username: string) => void) | null = null;
+
+    // --- Boss round state (v1.5.0) ---
+    private currentRoundType: RoundType = 'normal';
+    private bossRoundInfo: BossRoundInfo | null = null;
 
     // The current pool of active verified effects — sourced from the shared registry
     private effectPool: PoolEffect[] = VOTABLE_EFFECTS.map((e: EffectDef) => ({
@@ -281,6 +305,76 @@ export class VotingManager extends EventEmitter {
         return this.pendingShields.shift() ?? null;
     }
 
+    // ─── SESSION PERSISTENCE (v1.5.0) ────────────────────────────────────
+
+    /** Слепок состояния Директора для выживания рестарта приложения */
+    getSessionSnapshot(): DirectorSession {
+        const winRounds: Record<string, number> = {};
+        for (const effect of this.effectPool) {
+            if (effect.winRounds) winRounds[effect.id] = effect.winRounds;
+        }
+        return {
+            roundNumber: this.roundNumber,
+            negativeWinStreak: this.negativeWinStreak,
+            recentWinners: [...this.recentWinners],
+            winRounds,
+            megaMoments: [...this.megaMoments]
+        };
+    }
+
+    /** Восстанавливает состояние Директора после рестарта */
+    restoreSession(snapshot: DirectorSession) {
+        this.roundNumber = snapshot.roundNumber;
+        this.negativeWinStreak = snapshot.negativeWinStreak;
+        this.recentWinners = [...snapshot.recentWinners];
+        this.megaMoments = [...snapshot.megaMoments];
+        for (const effect of this.effectPool) {
+            effect.winRounds = snapshot.winRounds[effect.id] ?? 0;
+        }
+        sysLogger.info(`[Session] Restored: round ${this.roundNumber}, negative streak ${this.negativeWinStreak}, recent winners ${this.recentWinners.length}`);
+    }
+
+    /** Пишет слепок на диск (вызывается при stop/panicStop/выходе) */
+    persistSession() {
+        sessionStore.save(this.getSessionSnapshot());
+    }
+
+    /** Полный сброс статистики сессии (кнопка «новый стрим») */
+    resetSession() {
+        this.roundNumber = 0;
+        this.negativeWinStreak = 0;
+        this.recentWinners = [];
+        this.megaMoments = [];
+        for (const effect of this.effectPool) effect.winRounds = 0;
+        sessionStore.clear();
+        sysLogger.info('[Session] New stream — director statistics reset');
+    }
+
+    // ─── BOSS ROUNDS (v1.5.0) ────────────────────────────────────────────
+
+    /** Пул испытаний для босс-раунда: три самых жёстких эффекта */
+    private pickBossOptions(): PoolEffect[] {
+        const hostile = this.effectPool.filter(e => e.category !== 'positive');
+        const shuffled = [...hostile].sort(() => 0.5 - Math.random());
+        // Guarantee one negative and one psychological when possible
+        const negative = shuffled.find(e => e.category === 'negative');
+        const psychological = shuffled.find(e => e.category === 'psychological');
+        const picked = [negative, psychological].filter(Boolean) as PoolEffect[];
+        for (const candidate of shuffled) {
+            if (picked.length >= 3) break;
+            if (!picked.find(p => p.id === candidate.id)) picked.push(candidate);
+        }
+        return picked.slice(0, 3);
+    }
+
+    private shouldStartBossRound(): boolean {
+        if (!this.director.enabled) return false;
+        if (this.director.bossRoundChance <= 0) return false;
+        // Never two boss rounds back to back
+        if (this.currentRoundType === 'boss') return false;
+        return Math.random() < this.director.bossRoundChance;
+    }
+
     startCycle() {
         if (this.isActive || this.traitorState.active) return;
         this.startVote();
@@ -364,7 +458,23 @@ export class VotingManager extends EventEmitter {
         this.roundChatters.clear();
         this.rerollUsedThisRound = false;
 
-        this.buildVotingTriple();
+        if (this.shouldStartBossRound()) {
+            this.currentRoundType = 'boss';
+            this.bossRoundInfo = { threshold: this.director.bossThreshold, votes: 0, passed: false };
+            const bossEffects = this.pickBossOptions().sort(() => 0.5 - Math.random());
+            this.options = bossEffects.map((effect, index) => ({
+                id: index + 1,
+                effectId: effect.id,
+                displayName: effect.name,
+                votes: 0,
+                category: effect.category
+            }));
+            sysLogger.info(`[Boss] Round #${this.roundNumber} is a BOSS ROUND — threshold ${this.director.bossThreshold} votes.`, this.options.map(o => o.displayName));
+        } else {
+            this.currentRoundType = 'normal';
+            this.bossRoundInfo = null;
+            this.buildVotingTriple();
+        }
 
         sysLogger.info(`Round #${this.roundNumber} started. Options:`, this.options.map(o => o.displayName));
 
@@ -531,9 +641,26 @@ export class VotingManager extends EventEmitter {
             this.megaMoments.push(winner.displayName);
         }
 
+        // Boss round: the effect lands only if the chat gathered enough distinct votes
+        let bossFailed = false;
+        if (this.currentRoundType === 'boss' && this.bossRoundInfo) {
+            const distinctVotes = this.voterChoices.size;
+            this.bossRoundInfo.votes = distinctVotes;
+            this.bossRoundInfo.passed = distinctVotes >= this.bossRoundInfo.threshold;
+            bossFailed = !this.bossRoundInfo.passed;
+            sysLogger.info(`[Boss] Round #${this.roundNumber} ${bossFailed ? 'FAILED' : 'BEATEN'}: ${distinctVotes}/${this.bossRoundInfo.threshold} distinct votes.`);
+            this.emit('boss:result', {
+                passed: this.bossRoundInfo.passed,
+                votes: distinctVotes,
+                threshold: this.bossRoundInfo.threshold,
+                winner: winner.displayName
+            });
+        }
+
         // Karma economy: a purchased shield cancels the incoming hostile effect once
+        // (skipped when the boss round already swallowed the effect)
         let shieldedBy: string | null = null;
-        if (winnerCategory !== 'positive') {
+        if (!bossFailed && winnerCategory !== 'positive') {
             shieldedBy = this.consumeShieldIfAny();
         }
 
@@ -541,6 +668,8 @@ export class VotingManager extends EventEmitter {
             sysLogger.info(`[Karma] Shield from ${shieldedBy} cancelled hostile winner [${winner.displayName}].`);
             this.emit('vote:shielded', { by: shieldedBy, cancelled: winner.displayName });
             this.emit('vote:end', { winner: null, shieldedBy, cancelled: winner.displayName, state: this.getState() });
+        } else if (bossFailed) {
+            this.emit('vote:end', { winner: null, bossFailed: true, cancelled: winner.displayName, state: this.getState() });
         } else {
             this.emit('vote:end', { winner, state: this.getState() });
         }
@@ -578,6 +707,8 @@ export class VotingManager extends EventEmitter {
             timeRemainingMs: this.timeRemainingMs,
             totalVotes,
             intervention: this.interventionState,
+            roundType: this.currentRoundType,
+            boss: this.bossRoundInfo,
             director: {
                 mercyActive,
                 pityBoostedIds: mercyActive ? this.getPityBoostedIds() : []
@@ -596,12 +727,14 @@ export class VotingManager extends EventEmitter {
             this.traitorState = { active: false, username: null, options: [], timer: null };
             this.emit('traitor:end', { completed: false });
         }
+        this.persistSession();
     }
 
     /** Hard stop for the panic hotkey: freeze everything, no auto-restart */
     panicStop() {
         this.stop();
         if (this.cooldownTimer) { clearTimeout(this.cooldownTimer); this.cooldownTimer = null; }
+        this.persistSession();
         this.emit('vote:update', this.getState());
         sysLogger.warn('[VotingManager] PANIC STOP — autopilot frozen until manually resumed.');
     }

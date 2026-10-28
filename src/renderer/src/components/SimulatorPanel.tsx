@@ -78,11 +78,14 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
     quietInterventionChance: 0.6,
     mercyStreak: 3,
     winnerCooldownRounds: 2,
-    unseenThreshold: 2
+    unseenThreshold: 2,
+    bossRoundChance: 0.1,
+    bossThreshold: 12
   })
   const [ttsConfig, setTtsConfig] = useState({ enabled: true })
   const [ttsStatus, setTtsStatus] = useState<{ enabled: boolean; available: boolean } | null>(null)
   const [ttsWarm, setTtsWarm] = useState<string>('')
+  const [obsMarkerStatus, setObsMarkerStatus] = useState<string>('')
   const [remoteInfo, setRemoteInfo] = useState<{ url: string; qr: string; clients: number } | null>(null)
   const [copiedRemote, setCopiedRemote] = useState<boolean>(false)
   const [testSuccessEffect, setTestSuccessEffect] = useState<string | null>(null)
@@ -1260,9 +1263,36 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
                         onChange={(e) => setDirector({ ...director, quietInterventionChance: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0.6)) })}
                       />
                     </div>
+                    <div>
+                      <label className="block text-zinc-400 text-[9px] font-bold uppercase mb-1">
+                        Шанс босс-раунда (0-1)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        className="w-full bg-[#08090d] border border-[#222634] focus:border-cyan-600/70 text-zinc-100 px-2 py-1.5 font-mono text-xs rounded outline-none"
+                        value={director.bossRoundChance}
+                        onChange={(e) => setDirector({ ...director, bossRoundChance: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)) })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-zinc-400 text-[9px] font-bold uppercase mb-1">
+                        Порог явки босс-раунда
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        className="w-full bg-[#08090d] border border-[#222634] focus:border-cyan-600/70 text-zinc-100 px-2 py-1.5 font-mono text-xs rounded outline-none"
+                        value={director.bossThreshold}
+                        onChange={(e) => setDirector({ ...director, bossThreshold: Math.max(1, parseInt(e.target.value) || 12) })}
+                      />
+                    </div>
                   </div>
                   <div className="text-[9px] text-zinc-500 font-mono leading-relaxed">
-                    Директор следит за вовлечённостью и балансом: в тихом чате повышает шанс вмешательства, после серии негативных побед подмешивает позитив, а недавние победители временно исключаются из пула.
+                    Директор следит за вовлечённостью и балансом: в тихом чате повышает шанс вмешательства, после серии негативных побед подмешивает позитив, а недавние победители временно исключаются из пула. Босс-раунд даёт тройку жёстких эффектов: они срабатывают только если суммарная явка достигла порога — иначе чат проваливает раунд.
                   </div>
                 </div>
               </div>
@@ -1291,6 +1321,26 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
                 >
                   ОПУБЛИКОВАТЬ ИТОГИ СТРИМА
                 </button>
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[10px] uppercase font-mono font-bold py-1.5 rounded transition-colors"
+                    onClick={() => window.api?.resetSession?.()}
+                  >
+                    НОВЫЙ СТРИМ
+                  </button>
+                  <button
+                    className="flex-1 bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[10px] uppercase font-mono font-bold py-1.5 rounded transition-colors"
+                    onClick={async () => {
+                      const r = await window.api?.testObsMarker?.()
+                      setObsMarkerStatus(r?.ok ? 'Маркер отправлен' : r?.connected ? 'OBS подключён, но запись выключена' : 'OBS не подключён')
+                    }}
+                  >
+                    ТЕСТ МАРКЕРА OBS
+                  </button>
+                </div>
+                {obsMarkerStatus && (
+                  <div className="text-[10px] font-mono text-amber-300">{obsMarkerStatus}</div>
+                )}
               </div>
             </div>
 

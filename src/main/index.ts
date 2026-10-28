@@ -9,6 +9,8 @@ import { TwitchBridge } from './chat-bridge/TwitchBridge'
 import { DonationBridge } from './chat-bridge/DonationBridge'
 import { REBridge } from './game-bridge/REBridge'
 import { VotingManager } from './game-bridge/VotingManager'
+import { sessionStore } from './game-bridge/SessionStore'
+import { obsMarkerService } from './integrations/ObsMarkerService'
 import { narrator, getAudioBasePath, getAllLines } from './ai-narrator/Narrator'
 import { ttsService } from './ai-narrator/TTSService'
 import { sysLogger } from './utils/logger'
@@ -92,6 +94,7 @@ function createWindow(): void {
     overlayServer.broadcast('vote:update', { isActive: false, options: [], timeRemainingMs: 0, totalVotes: 0 });
     mainWindow.webContents.send('simulator:syslog', { message: 'PANIC STOP: все эффекты сброшены, автопилот остановлен.' });
     narrator.say('panic');
+    obsMarkerService.mark('PANIC STOP').catch(() => {});
     if (activeTwitchChannel) {
       twitchBridge.sendMessage(activeTwitchChannel, '☣️ [UMBRELLA CORP] ⏸ АВАРИЙНАЯ ОСТАНОВКА. Все активные протоколы деактивированы.');
     }
@@ -295,6 +298,24 @@ function createWindow(): void {
 
   loadDirectorConfig();
 
+  // Restore director session statistics (round number, streaks, winners)
+  votingManager.restoreSession(sessionStore.load());
+  ipcMain.handle('session:reset', () => {
+    votingManager.resetSession();
+    mainWindow.webContents.send('simulator:syslog', { message: 'SESSION RESET: статистика Директора обнулена.' });
+    return votingManager.getSessionSnapshot();
+  });
+  ipcMain.handle('session:get', () => votingManager.getSessionSnapshot());
+
+  // ─── OBS MARKERS (v1.5.0) ───
+  obsMarkerService.loadConfig();
+  ipcMain.handle('obs:getMarkerConfig', () => obsMarkerService.getConfig());
+  ipcMain.handle('obs:setMarkerConfig', (_, patch) => obsMarkerService.setConfig(patch));
+  ipcMain.handle('obs:testMarker', async () => {
+    const ok = await obsMarkerService.mark('RE:CONTROL TEST');
+    return { ok, connected: obsMarkerService.isConnected() };
+  });
+
   app.on('before-quit', () => {
     sysLogger.info('[App] Clean shutdown initiated...')
     try { votingManager.stop() } catch { /* ignore */ }
@@ -429,6 +450,7 @@ function createWindow(): void {
     narrator.say('mega_unlock')
     mainWindow.webContents.send('simulator:syslog', { message: `MEGA UNLOCKED: ${displayName}` })
     overlayServer.broadcast('mega:unlock', { displayName })
+    obsMarkerService.mark(`MEGA: ${displayName}`).catch(() => {})
   })
 
   votingManager.on('vote:shielded', () => {
@@ -558,12 +580,22 @@ function createWindow(): void {
     mainWindow.webContents.send('vote:update', state)
 
     if (!winner) {
-      // Karma shield cancelled a hostile effect
-      mainWindow.webContents.send('simulator:syslog', { message: `SHIELD: ${shieldedBy} cancelled ${cancelled}` })
-      overlayServer.broadcast('vote:shielded', { by: shieldedBy, cancelled })
-      mainWindow.webContents.send('vote:shielded', { by: shieldedBy, cancelled })
-      if (activeTwitchChannel) {
-        twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 🛡 ЗАЩИТНЫЙ ПРОТОКОЛ @${shieldedBy}: враждебный модификатор [ ${cancelled} ] нейтрализован.`);
+      if (shieldedBy) {
+        // Karma shield cancelled a hostile effect
+        mainWindow.webContents.send('simulator:syslog', { message: `SHIELD: ${shieldedBy} cancelled ${cancelled}` })
+        overlayServer.broadcast('vote:shielded', { by: shieldedBy, cancelled })
+        mainWindow.webContents.send('vote:shielded', { by: shieldedBy, cancelled })
+        if (activeTwitchChannel) {
+          twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 🛡 ЗАЩИТНЫЙ ПРОТОКОЛ @${shieldedBy}: враждебный модификатор [ ${cancelled} ] нейтрализован.`);
+        }
+      } else {
+        // Boss round lacked the required turnout — the effect never lands
+        const boss = state.boss
+        mainWindow.webContents.send('simulator:syslog', { message: `BOSS FAILED: ${cancelled} (${boss?.votes ?? 0}/${boss?.threshold ?? 0})` })
+        overlayServer.broadcast('boss:failed', { cancelled, votes: boss?.votes ?? 0, threshold: boss?.threshold ?? 0 })
+        if (activeTwitchChannel) {
+          twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 💀 БОСС-РАУНД ПРОВАЛЕН: явка ${boss?.votes ?? 0}/${boss?.threshold ?? 0}. Модификатор [ ${cancelled} ] не активирован.`);
+        }
       }
       return
     }
@@ -602,6 +634,7 @@ function createWindow(): void {
     mainWindow.webContents.send('traitor:start', state)
     mainWindow.webContents.send('simulator:syslog', { message: `TRAITOR MODE STARTED! Traitor: ${state.username}` })
     overlayServer.broadcast('traitor:start', state)
+    obsMarkerService.mark(`TRAITOR: @${state.username}`).catch(() => {})
     
     if (activeTwitchChannel) {
       twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 💀 КРИТИЧЕСКАЯ УГРОЗА! Предатель @${state.username} перехватил терминал био-контроля!`);

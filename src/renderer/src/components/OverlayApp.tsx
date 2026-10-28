@@ -14,6 +14,8 @@ interface VoteState {
   options: VoteOption[]
   timeRemainingMs: number
   totalVotes: number
+  roundType?: 'normal' | 'boss'
+  boss?: { threshold: number; votes: number; passed: boolean } | null
   intervention?: {
     type: 'veto' | 'invert' | 'blind' | 'equalize'
     message: string
@@ -98,6 +100,11 @@ export default function OverlayApp() {
             setInterventionBanner({ type: 'shield', message: `🛡 ЗАЩИТА @${msg.data.by}: [${msg.data.cancelled}] нейтрализован` })
             clearTimeout(bannerTimer)
             bannerTimer = setTimeout(() => setInterventionBanner(null), 6000)
+          } else if (msg.type === 'boss:failed') {
+            setVoteState(null)
+            setInterventionBanner({ type: 'boss_failed', message: `💀 БОСС ПРОВАЛЕН: ${msg.data.votes}/${msg.data.threshold} — [${msg.data.cancelled}] не активирован` })
+            clearTimeout(bannerTimer)
+            bannerTimer = setTimeout(() => setInterventionBanner(null), 8000)
           } else if (msg.type === 'report:session') {
             setReportData(msg.data)
             clearTimeout(reportTimer)
@@ -199,8 +206,17 @@ export default function OverlayApp() {
             >
               <div className="flex justify-between items-center mb-6 pb-4 border-b-4 border-pixel-border">
                 <div className="flex items-center gap-3">
-                  <Activity className="text-pixel-cyan animate-pulse" size={28} />
-                  <h3 className="text-2xl text-pixel-cyan font-bold tracking-wider drop-shadow-md">VOTE NOW</h3>
+                  <Activity className={voteState.roundType === 'boss' ? 'text-pixel-danger animate-pulse' : 'text-pixel-cyan animate-pulse'} size={28} />
+                  <div className="flex flex-col">
+                    <h3 className={`text-2xl font-bold tracking-wider drop-shadow-md ${voteState.roundType === 'boss' ? 'text-pixel-danger' : 'text-pixel-cyan'}`}>
+                      {voteState.roundType === 'boss' ? 'BOSS ROUND' : 'VOTE NOW'}
+                    </h3>
+                    {voteState.roundType === 'boss' && (
+                      <span className="text-xs font-bold text-pixel-amber tracking-widest">
+                        ЯВКА: {voteState.totalVotes}/{voteState.boss?.threshold ?? 0} — ИНАЧЕ ПРОВАЛ
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 text-pixel-amber bg-pixel-dark px-3 py-1 rounded border-2 border-pixel-amber/50">
                   <Clock size={20} className="animate-pulse" />
