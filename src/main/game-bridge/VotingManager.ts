@@ -18,10 +18,39 @@ export interface VoteState {
     timeRemainingMs: number;
     totalVotes: number;
     intervention?: { type: string; message: string } | null;
+    director?: {
+        mercyActive: boolean;
+        pityBoostedIds: string[];
+    };
 }
 
+export interface DirectorConfig {
+    enabled: boolean;
+    /** Below this share of unique chatters voting at half-time the crowd is "quiet" */
+    lowEngagementThreshold: number;
+    /** Intervention chance when the crowd is quiet (0..1) */
+    quietInterventionChance: number;
+    /** Consecutive negative wins before the mercy buffer kicks in */
+    mercyStreak: number;
+    /** Rounds a recently-won effect is excluded from the voting pool */
+    winnerCooldownRounds: number;
+    /** Below this many win-rounds an effect is "unseen" and gets a showcase boost */
+    unseenThreshold: number;
+}
+
+const DEFAULT_DIRECTOR: DirectorConfig = {
+    enabled: true,
+    lowEngagementThreshold: 0.25,
+    quietInterventionChance: 0.6,
+    mercyStreak: 3,
+    winnerCooldownRounds: 2,
+    unseenThreshold: 2
+};
+
+type PoolEffect = { id: string; name: string; category: string; winRounds?: number };
+
 export class VotingManager extends EventEmitter {
-    
+
     private interventionTimer: NodeJS.Timeout | null = null;
     private interventionState: any = null;
     private options: VoteOption[] = [];
@@ -32,25 +61,34 @@ export class VotingManager extends EventEmitter {
     private timeRemainingMs: number = 0;
     private lastVotedOptionId: number | null = null;
     private consecutiveVotesCount: number = 0;
-    
+
     private readonly VOTE_DURATION_MS = 60000; // 60 seconds to vote
     private COOLDOWN_DURATION_MS = 600000; // 10 minutes cooldown (Marathon pacing default)
-    
+
+    // --- Director state ---
+    private director: DirectorConfig = { ...DEFAULT_DIRECTOR };
+    private negativeWinStreak = 0;
+    private roundNumber = 0;
+    private recentWinners: string[] = [];
+    /** Unique chatters seen during the current vote (participation pulse) */
+    private roundChatters = new Set<string>();
+    private chatCommandHandler: ((command: string, username: string) => void) | null = null;
+
     // The current pool of active verified effects
-    private effectPool = [
+    private effectPool: PoolEffect[] = [
         // Positive
         { id: 'light_heal', name: 'Подорожник (Лечение 15%)', category: 'positive' },
         { id: 'speed_up', name: 'Адреналин (Ускорение)', category: 'positive' },
         { id: 'care_package', name: 'С небес (Патроны)', category: 'positive' },
         { id: 'green_herb', name: 'Зеленушка (Трава)', category: 'positive' },
-        
+
         // Negative
         { id: 'push_back', name: 'Ветерок (Отброс)', category: 'negative' },
         { id: 'papercut', name: 'Царапина (-5% ХП)', category: 'negative' },
         { id: 'slow_down', name: 'Тяжелые ботинки (Замедление)', category: 'negative' },
         { id: 'empty_mag', name: 'Осечка (Пустой магазин)', category: 'negative' },
         { id: 'disarm', name: 'Пацифист (Оружие заблокировано)', category: 'negative' },
-        
+
         // Psychological / Troll
         { id: 'hop', name: 'Ик! (Подскок)', category: 'psychological' },
         { id: 'spin_180', name: 'Головокружение (180°)', category: 'psychological' },
@@ -89,6 +127,85 @@ export class VotingManager extends EventEmitter {
         return count;
     }
 
+    // ─── DIRECTOR: adaptive pacing ───────────────────────────────────────
+
+    setDirectorConfig(config: Partial<DirectorConfig>) {
+        this.director = { ...this.director, ...config };
+        sysLogger.info('[Director] Config updated:', this.director);
+    }
+
+    getDirectorConfig(): DirectorConfig {
+        return { ...this.director };
+    }
+
+    getDirectorStats(): { roundNumber: number; negativeWinStreak: number; recentWinners: string[] } {
+        return {
+            roundNumber: this.roundNumber,
+            negativeWinStreak: this.negativeWinStreak,
+            recentWinners: [...this.recentWinners]
+        };
+    }
+
+    /** Effect ids the director currently excludes (recent winners) */
+    private getExcludedIds(): Set<string> {
+        if (!this.director.enabled || this.director.winnerCooldownRounds <= 0) return new Set();
+        const excluded = new Set<string>();
+        // recentWinners is ordered oldest→newest; only the last N entries cool down
+        for (let i = Math.max(0, this.recentWinners.length - this.director.winnerCooldownRounds); i < this.recentWinners.length; i++) {
+            excluded.add(this.recentWinners[i]);
+        }
+        return excluded;
+    }
+
+    private isMercyActive(): boolean {
+        return this.director.enabled && this.negativeWinStreak >= this.director.mercyStreak;
+    }
+
+    /** Effects that rarely win get a temporary showcase boost in the next triple */
+    private getPityBoostedIds(): string[] {
+        if (!this.director.enabled) return [];
+        const unseen = this.effectPool
+            .filter(e => (e.winRounds ?? 0) < this.director.unseenThreshold)
+            .map(e => e.id);
+        return unseen.slice(0, 3);
+    }
+
+    /** Engagement pulse measured at half-time: unique voters / unique chatters */
+    private isCrowdQuiet(): boolean {
+        const chatters = Math.max(this.roundChatters.size, 1);
+        const voters = this.voterChoices.size;
+        return voters / chatters < this.director.lowEngagementThreshold;
+    }
+
+    private rollDirectorIntervention(): void {
+        if (!this.isActive) return;
+        const quiet = this.isCrowdQuiet();
+        const chance = quiet ? this.director.quietInterventionChance : 0.3;
+        if (!quiet && this.director.enabled) {
+            sysLogger.info(`[Director] Crowd pulse: ${this.voterChoices.size}/${this.roundChatters.size} chatters voting — engagement healthy, fair dice.`);
+        }
+        this.rollIntervention(false, chance);
+    }
+
+    // ─── Chat commands (!karma, !top, !effects, !me) ─────────────────────
+
+    /**
+     * The host (index.ts) routes non-numeric chat messages here via
+     * TwitchBridge / ChatSimulator; replies are emitted as 'bot:reply'.
+     */
+    setChatCommandHandler(handler: (command: string, username: string) => void) {
+        this.chatCommandHandler = handler;
+    }
+
+    private handleChatCommandText(cmd: ChatCommand): boolean {
+        const text = cmd.command.trim().toLowerCase();
+        if (!text.startsWith('!')) return false;
+        if (this.chatCommandHandler) {
+            this.chatCommandHandler(text, cmd.username);
+        }
+        return true;
+    }
+
     startCycle() {
         if (this.isActive || this.traitorState.active) return;
         this.startVote();
@@ -99,34 +216,64 @@ export class VotingManager extends EventEmitter {
         if (this.cooldownTimer) { clearTimeout(this.cooldownTimer); this.cooldownTimer = null; }
         if (this.interventionTimer) { clearTimeout(this.interventionTimer); this.interventionTimer = null; }
         this.isActive = true;
-        
+        this.roundNumber++;
+
         this.interventionState = null;
         this.timeRemainingMs = this.VOTE_DURATION_MS;
         this.lastVotedOptionId = null;
         this.consecutiveVotesCount = 0;
         this.voterChoices.clear();
-        
-        // Pick 3 random options
-        const posPool = this.effectPool.filter(e => e.category === 'positive');
-        const negPool = this.effectPool.filter(e => e.category === 'negative');
-        const psyPool = this.effectPool.filter(e => e.category === 'psychological');
-        
-        const getRandom = (arr: any[]) => arr[Math.floor(Math.random() * arr.length)];
-        
-        let selectedEffects = [
-            getRandom(posPool),
-            getRandom(negPool),
-            getRandom(psyPool)
-        ].filter(Boolean); // Fallback in case a category is empty
+        this.roundChatters.clear();
+
+        // Pick 3 random options, one per category
+        const excluded = this.getExcludedIds();
+        const mercy = this.isMercyActive();
+        if (mercy) {
+            sysLogger.info(`[Director] Mercy buffer ACTIVE: ${this.negativeWinStreak} negative wins in a row — boosting positive odds this round.`);
+        }
+
+        const pickOne = (category: string): PoolEffect | undefined => {
+            let pool = this.effectPool.filter(e => e.category === category && !excluded.has(e.id));
+            if (pool.length === 0) pool = this.effectPool.filter(e => e.category === category);
+            if (pool.length === 0) return undefined;
+
+            const pityBoosted = new Set(this.getPityBoostedIds());
+            const weights = pool.map(e => pityBoosted.has(e.id) ? 3 : 1);
+            const total = weights.reduce((a, b) => a + b, 0);
+            let roll = Math.random() * total;
+            for (let i = 0; i < pool.length; i++) {
+                roll -= weights[i];
+                if (roll <= 0) return pool[i];
+            }
+            return pool[pool.length - 1];
+        };
+
+        let selectedEffects: PoolEffect[] = [];
+
+        if (mercy && Math.random() < 0.6) {
+            // Mercy round: two positive slots instead of one
+            selectedEffects = [
+                pickOne('positive'),
+                pickOne('positive'),
+                pickOne('psychological')
+            ].filter(Boolean) as PoolEffect[];
+            sysLogger.info('[Director] Mercy round: extra positive effect injected into the triple.');
+        } else {
+            selectedEffects = [
+                pickOne('positive'),
+                pickOne('negative'),
+                pickOne('psychological')
+            ].filter(Boolean) as PoolEffect[];
+        }
 
         // If for some reason we have less than 3, fill from remaining
-        while(selectedEffects.length < 3) {
-            const fallback = getRandom(this.effectPool);
+        while (selectedEffects.length < 3) {
+            const fallback = this.effectPool[Math.floor(Math.random() * this.effectPool.length)];
             if (!selectedEffects.find(e => e.id === fallback.id)) {
                 selectedEffects.push(fallback);
             }
         }
-        
+
         // Shuffle the 3 options so they aren't always 1:Pos 2:Neg 3:Psy
         selectedEffects = selectedEffects.sort(() => 0.5 - Math.random());
 
@@ -138,13 +285,13 @@ export class VotingManager extends EventEmitter {
             category: effect.category
         }));
 
-        sysLogger.info('Started new voting cycle. Options:', this.options.map(o => o.displayName));
+        sysLogger.info(`Round #${this.roundNumber} started. Options:`, this.options.map(o => o.displayName));
+
         this.emit('vote:start', this.getState());
 
-        
-        // 30% chance for an intervention exactly halfway through
+        // Intervention roll at half-time; the director may raise the stakes on a quiet crowd
         this.interventionTimer = setTimeout(() => {
-            this.rollIntervention();
+            this.rollDirectorIntervention();
         }, this.VOTE_DURATION_MS / 2);
 
         this.timer = setInterval(() => {
@@ -205,6 +352,7 @@ export class VotingManager extends EventEmitter {
         if (cmd.isTrusted) {
             this.activeTrustedUsers.set(cmd.username, Date.now());
         }
+        this.roundChatters.add(cmd.username);
 
         if (this.traitorState.active) {
             if (cmd.username.toLowerCase() === this.traitorState.username?.toLowerCase()) {
@@ -221,8 +369,11 @@ export class VotingManager extends EventEmitter {
             return; // Ignore other votes during traitor mode
         }
 
+        // Bot commands (!karma, !top, ...) are handled outside the vote flow
+        if (this.handleChatCommandText(cmd)) return;
+
         if (!this.isActive) return;
-        
+
         // Strict vote parsing: only "1", "2", or "3"
         const voteText = cmd.command.trim();
         if (/^[1-3]$/.test(voteText)) {
@@ -257,7 +408,7 @@ export class VotingManager extends EventEmitter {
                     const category = effectDef?.category || option.category || 'positive';
                     dbManager.addVote(cmd.username, option.effectId, category);
                 }
-                
+
                 this.emit('vote:update', this.getState());
             }
         }
@@ -280,7 +431,19 @@ export class VotingManager extends EventEmitter {
         const winner = topOptions[Math.floor(Math.random() * topOptions.length)] || this.options[0];
 
         sysLogger.info('Voting ended. Winner: ' + winner.displayName + ' with ' + winner.votes + ' votes.');
-        
+
+        // Director bookkeeping: mercy streak and winner cooldown
+        const effectDef = this.effectPool.find(e => e.id === winner.effectId);
+        const winnerCategory = effectDef?.category || winner.category || 'positive';
+        if (winnerCategory === 'negative') {
+            this.negativeWinStreak++;
+        } else {
+            this.negativeWinStreak = 0;
+        }
+        if (effectDef) effectDef.winRounds = (effectDef.winRounds ?? 0) + 1;
+        this.recentWinners.push(winner.effectId);
+        if (this.recentWinners.length > 8) this.recentWinners.shift();
+
         if (winner.isMega) {
             winner.effectId = 'MEGA_' + winner.effectId;
         }
@@ -312,15 +475,20 @@ export class VotingManager extends EventEmitter {
 
     getState(): VoteState {
         const totalVotes = this.options.reduce((sum, opt) => sum + opt.votes, 0);
+        const mercyActive = this.isMercyActive();
         return {
             isActive: this.isActive,
             options: this.options,
             timeRemainingMs: this.timeRemainingMs,
             totalVotes,
-            intervention: this.interventionState
+            intervention: this.interventionState,
+            director: {
+                mercyActive,
+                pityBoostedIds: mercyActive ? this.getPityBoostedIds() : []
+            }
         };
     }
-    
+
     stop() {
         this.isActive = false;
         if (this.timer) { clearInterval(this.timer); this.timer = null; }
@@ -334,22 +502,29 @@ export class VotingManager extends EventEmitter {
         }
     }
 
+    /** Hard stop for the panic hotkey: freeze everything, no auto-restart */
+    panicStop() {
+        this.stop();
+        if (this.cooldownTimer) { clearTimeout(this.cooldownTimer); this.cooldownTimer = null; }
+        this.emit('vote:update', this.getState());
+        sysLogger.warn('[VotingManager] PANIC STOP — autopilot frozen until manually resumed.');
+    }
+
     setCooldown(ms: number) {
         this.COOLDOWN_DURATION_MS = ms;
     }
 
-    public rollIntervention(force: boolean = false) {
+    public rollIntervention(force: boolean = false, chance: number = 0.3) {
         if (!this.isActive) return;
-        
-        // 30% chance
-        if (!force && Math.random() > 0.3) {
+
+        if (!force && Math.random() > chance) {
             sysLogger.info('Intervention rolled: No intervention this time.');
-            return; 
+            return;
         }
 
         const interventions = ['veto', 'invert', 'blind', 'equalize', 'turbo'];
         const chosen = interventions[Math.floor(Math.random() * interventions.length)];
-        
+
         sysLogger.info(`Intervention rolled: ${chosen}!`);
 
         let message = '';
@@ -409,5 +584,3 @@ export class VotingManager extends EventEmitter {
         this.emit('vote:update', this.getState());
     }
 }
-
-

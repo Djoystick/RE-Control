@@ -42,6 +42,8 @@ declare global {
       setVolume: (volume: number) => Promise<number>
       getObsStatus: () => Promise<{ connected: boolean; count: number }>
       getOverlayUrl: () => Promise<string>
+      getDirectorConfig: () => Promise<any>
+      saveDirectorConfig: (config: any) => Promise<any>
       onObsStatus: (cb: (data: { connected: boolean; count: number }) => void) => () => void
       getRemoteInfo: () => Promise<{ url: string; qr: string; clients: number }>
       triggerEffect: (effectId: string) => Promise<string>

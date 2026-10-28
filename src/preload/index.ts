@@ -84,6 +84,8 @@ const api = {
   setVolume: (volume: number) => ipcRenderer.invoke('settings:setVolume', volume),
   getObsStatus: () => ipcRenderer.invoke('obs:getStatus'),
   getOverlayUrl: () => ipcRenderer.invoke('obs:getOverlayUrl'),
+  getDirectorConfig: () => ipcRenderer.invoke('settings:getDirector'),
+  saveDirectorConfig: (config: any) => ipcRenderer.invoke('settings:saveDirector', config),
   onObsStatus: (cb: (data: { connected: boolean; count: number }) => void) => {
     const handler = (_: any, d: any) => cb(d)
     ipcRenderer.on('obs:status', handler)

@@ -49,10 +49,14 @@ export class ChatSimulator implements IChatBridge {
                 const isTrusted = Math.random() < 0.3;
                 const botId = Math.floor(Math.random() * 30) + 1;
                 const randomViewer = isTrusted ? `VIP_Viewer_${botId}` : `Viewer_${botId}`;
-                const vote = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
+                // Occasionally a simulated viewer types a bot command instead of a vote
+                const isCommand = Math.random() < 0.05;
+                const command = isCommand
+                    ? (['!karma', '!top', '!effects', '!me'][Math.floor(Math.random() * 4)])
+                    : (Math.floor(Math.random() * 3) + 1).toString();
                 this.commandCallback({
                     username: randomViewer,
-                    command: vote.toString(),
+                    command,
                     args: [],
                     isTrusted
                 });

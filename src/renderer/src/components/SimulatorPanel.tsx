@@ -71,7 +71,15 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
   const [botUsername, setBotUsername] = useState<string>('')
   const [botToken, setBotToken] = useState<string>('')
 
-  const [hotkeys, setHotkeys] = useState({ traitor: '', intervention: '' })
+  const [hotkeys, setHotkeys] = useState({ traitor: '', intervention: '', panic: 'CommandOrControl+Shift+P' })
+  const [director, setDirector] = useState({
+    enabled: true,
+    lowEngagementThreshold: 0.25,
+    quietInterventionChance: 0.6,
+    mercyStreak: 3,
+    winnerCooldownRounds: 2,
+    unseenThreshold: 2
+  })
   const [remoteInfo, setRemoteInfo] = useState<{ url: string; qr: string; clients: number } | null>(null)
   const [copiedRemote, setCopiedRemote] = useState<boolean>(false)
   const [testSuccessEffect, setTestSuccessEffect] = useState<string | null>(null)
@@ -94,6 +102,10 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
   useEffect(() => {
     window.api?.getHotkeys?.().then((h: any) => {
       if (h) setHotkeys(h)
+    })
+
+    window.api?.getDirectorConfig?.().then((d: any) => {
+      if (d) setDirector((prev) => ({ ...prev, ...d }))
     })
 
     window.api?.getVolume?.().then((v: number) => {
@@ -1125,7 +1137,7 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
         {/* TAB 5: ОПЦИИ (Full-Width Settings) */}
         {activeTab === 'settings' && (
           <div className="w-full h-full grid grid-cols-2 gap-3 overflow-hidden">
-            {/* Left Card: Hotkeys */}
+            {/* Left Card: Hotkeys + Director */}
             <div className="bg-[#0e1017] border border-[#1e2332] p-3 rounded flex flex-col justify-between overflow-hidden">
               <div className="flex flex-col gap-2.5">
                 <h3 className="text-xs font-bold text-zinc-100 uppercase font-mono border-b border-[#1e2332] pb-2 flex items-center gap-2">
@@ -1136,8 +1148,8 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
                     <label className="block text-zinc-400 text-[10px] font-bold uppercase mb-1">
                       Клавиша вызова: Режим Предателя
                     </label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       className="w-full bg-[#08090d] border border-[#222634] focus:border-red-600/70 text-zinc-100 px-3 py-1.5 font-mono text-xs rounded outline-none transition-colors"
                       value={hotkeys.traitor}
                       onChange={(e) => setHotkeys({ ...hotkeys, traitor: e.target.value })}
@@ -1148,26 +1160,120 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
                     <label className="block text-zinc-400 text-[10px] font-bold uppercase mb-1">
                       Клавиша вызова: Вмешательство Амбреллы
                     </label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       className="w-full bg-[#08090d] border border-[#222634] focus:border-red-600/70 text-zinc-100 px-3 py-1.5 font-mono text-xs rounded outline-none transition-colors"
                       value={hotkeys.intervention}
                       onChange={(e) => setHotkeys({ ...hotkeys, intervention: e.target.value })}
                       placeholder="например: num2, F2"
                     />
                   </div>
+                  <div>
+                    <label className="block text-zinc-400 text-[10px] font-bold uppercase mb-1">
+                      Клавиша вызова: АВАРИЙНАЯ ОСТАНОВКА (Сброс всех эффектов)
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full bg-[#08090d] border border-[#222634] focus:border-red-600/70 text-zinc-100 px-3 py-1.5 font-mono text-xs rounded outline-none transition-colors"
+                      value={hotkeys.panic}
+                      onChange={(e) => setHotkeys({ ...hotkeys, panic: e.target.value })}
+                      placeholder="например: CommandOrControl+Shift+P"
+                    />
+                  </div>
                   <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
                     Поддерживаются: num0-num9, numdec, F1-F24, Control+Shift+T и др.
                   </div>
                 </div>
+
+                <h3 className="text-xs font-bold text-cyan-300 uppercase font-mono border-b border-[#1e2332] pb-2 pt-2 flex items-center gap-2">
+                  <span>ДИРЕКТОР ИВЕНТА (ADAPTIVE PACING)</span>
+                </h3>
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-2 text-[10px] text-zinc-300 font-bold uppercase cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="accent-cyan-500"
+                      checked={director.enabled}
+                      onChange={(e) => setDirector({ ...director, enabled: e.target.checked })}
+                    />
+                    Включить адаптивный пейсинг
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-zinc-400 text-[9px] font-bold uppercase mb-1">
+                        Милосердие: серий негативов
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        className="w-full bg-[#08090d] border border-[#222634] focus:border-cyan-600/70 text-zinc-100 px-2 py-1.5 font-mono text-xs rounded outline-none"
+                        value={director.mercyStreak}
+                        onChange={(e) => setDirector({ ...director, mercyStreak: Math.max(1, parseInt(e.target.value) || 1) })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-zinc-400 text-[9px] font-bold uppercase mb-1">
+                        Кулдаун побед (раундов)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={10}
+                        className="w-full bg-[#08090d] border border-[#222634] focus:border-cyan-600/70 text-zinc-100 px-2 py-1.5 font-mono text-xs rounded outline-none"
+                        value={director.winnerCooldownRounds}
+                        onChange={(e) => setDirector({ ...director, winnerCooldownRounds: Math.max(0, parseInt(e.target.value) || 0) })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-zinc-400 text-[9px] font-bold uppercase mb-1">
+                        Порог тишины чата (0-1)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        className="w-full bg-[#08090d] border border-[#222634] focus:border-cyan-600/70 text-zinc-100 px-2 py-1.5 font-mono text-xs rounded outline-none"
+                        value={director.lowEngagementThreshold}
+                        onChange={(e) => setDirector({ ...director, lowEngagementThreshold: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0.25)) })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-zinc-400 text-[9px] font-bold uppercase mb-1">
+                        Шанс интервенции в тишине (0-1)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        className="w-full bg-[#08090d] border border-[#222634] focus:border-cyan-600/70 text-zinc-100 px-2 py-1.5 font-mono text-xs rounded outline-none"
+                        value={director.quietInterventionChance}
+                        onChange={(e) => setDirector({ ...director, quietInterventionChance: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0.6)) })}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-[9px] text-zinc-500 font-mono leading-relaxed">
+                    Директор следит за вовлечённостью и балансом: в тихом чате повышает шанс вмешательства, после серии негативных побед подмешивает позитив, а недавние победители временно исключаются из пула.
+                  </div>
+                </div>
               </div>
 
-              <button
-                className="w-full bg-red-950/40 hover:bg-red-900/60 border border-red-800/70 text-red-200 text-xs uppercase font-mono font-bold py-2 rounded mt-3 transition-colors whitespace-nowrap shadow-[0_0_10px_rgba(220,38,38,0.15)]"
-                onClick={() => window.api?.saveHotkeys?.(hotkeys)}
-              >
-                СОХРАНИТЬ ГОРЯЧИЕ КЛАВИШИ
-              </button>
+              <div className="flex flex-col gap-2 mt-3">
+                <button
+                  className="w-full bg-red-950/40 hover:bg-red-900/60 border border-red-800/70 text-red-200 text-xs uppercase font-mono font-bold py-2 rounded transition-colors whitespace-nowrap shadow-[0_0_10px_rgba(220,38,38,0.15)]"
+                  onClick={() => window.api?.saveHotkeys?.(hotkeys)}
+                >
+                  СОХРАНИТЬ ГОРЯЧИЕ КЛАВИШИ
+                </button>
+                <button
+                  className="w-full bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-800/70 text-cyan-200 text-xs uppercase font-mono font-bold py-2 rounded transition-colors whitespace-nowrap"
+                  onClick={() => window.api?.saveDirectorConfig?.(director)}
+                >
+                  СОХРАНИТЬ ДИРЕКТОРА
+                </button>
+              </div>
             </div>
 
             {/* Right Card: Dangerous Zone & Maintenance */}

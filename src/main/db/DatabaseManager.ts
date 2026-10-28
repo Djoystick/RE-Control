@@ -80,6 +80,19 @@ export class DatabaseManager {
         }
     }
 
+    getViewerKarma(username: string): number {
+        this.flush();
+        if (!this.db) return 0;
+        try {
+            const stmt = this.db.prepare('SELECT karma FROM viewers WHERE username = ?');
+            const row = stmt.get(username) as { karma: number } | undefined;
+            return row?.karma ?? 0;
+        } catch (error) {
+            sysLogger.error('Failed to get viewer karma: ' + error);
+            return 0;
+        }
+    }
+
     close() {
         if (this.flushInterval) {
             clearInterval(this.flushInterval);

@@ -45,7 +45,8 @@ function createWindow(): void {
   
   const defaultHotkeys = {
     traitor: 'CommandOrControl+Shift+T',
-    intervention: 'CommandOrControl+Shift+I'
+    intervention: 'CommandOrControl+Shift+I',
+    panic: 'CommandOrControl+Shift+P'
   };
 
   function getHotkeys() {
@@ -58,7 +59,7 @@ function createWindow(): void {
   function registerGlobalHotkeys() {
     globalShortcut.unregisterAll();
     const h = getHotkeys();
-    
+
     if (h.traitor) {
       globalShortcut.register(h.traitor, () => {
         sysLogger.info(`[Hotkey] ${h.traitor} pressed -> Invoking Traitor`);
@@ -71,6 +72,26 @@ function createWindow(): void {
         (votingManager as any).rollIntervention(true);
       });
     }
+    if (h.panic) {
+      globalShortcut.register(h.panic, () => {
+        sysLogger.warn(`[Hotkey] ${h.panic} pressed -> PANIC STOP`);
+        panicStop();
+      });
+    }
+  }
+
+  function panicStop() {
+    votingManager.panicStop();
+    // Reset every active timed effect inside the game (time scale, FOV, blackout, ...)
+    gameBridge.sendCommand('reset_all').catch((err) => {
+      sysLogger.warn(`[Panic] Game reset_all failed (game offline?): ${err.message}`);
+    });
+    overlayServer.broadcast('effect:end', {});
+    overlayServer.broadcast('vote:update', { isActive: false, options: [], timeRemainingMs: 0, totalVotes: 0 });
+    mainWindow.webContents.send('simulator:syslog', { message: 'PANIC STOP: все эффекты сброшены, автопилот остановлен.' });
+    if (activeTwitchChannel) {
+      twitchBridge.sendMessage(activeTwitchChannel, '☣️ [UMBRELLA CORP] ⏸ АВАРИЙНАЯ ОСТАНОВКА. Все активные протоколы деактивированы.');
+    }
   }
 
   ipcMain.handle('settings:getHotkeys', () => getHotkeys());
@@ -82,6 +103,28 @@ function createWindow(): void {
   });
 
   registerGlobalHotkeys();
+
+  // --- DIRECTOR IPC (adaptive pacing config) ---
+  const DIRECTOR_CONFIG_FILE = join(app.getPath('userData'), 'director_config.json');
+
+  function loadDirectorConfig() {
+    if (fs.existsSync(DIRECTOR_CONFIG_FILE)) {
+      try {
+        const saved = JSON.parse(fs.readFileSync(DIRECTOR_CONFIG_FILE, 'utf8'));
+        votingManager.setDirectorConfig(saved);
+        sysLogger.info('[Director] Loaded saved config:', saved);
+      } catch (e) {
+        sysLogger.error('Failed to read director config: ' + e);
+      }
+    }
+  }
+
+  ipcMain.handle('settings:getDirector', () => votingManager.getDirectorConfig());
+  ipcMain.handle('settings:saveDirector', (_, config) => {
+    votingManager.setDirectorConfig(config);
+    fs.writeFileSync(DIRECTOR_CONFIG_FILE, JSON.stringify(votingManager.getDirectorConfig(), null, 2));
+    return votingManager.getDirectorConfig();
+  });
 
   // --- AUDIO VOLUME IPC ---
   const AUDIO_CONFIG_FILE = join(app.getPath('userData'), 'audio_config.json');
@@ -234,6 +277,8 @@ function createWindow(): void {
   const overlayServer = new OverlayServer()
   const donationBridge = new DonationBridge()
 
+  loadDirectorConfig();
+
   app.on('before-quit', () => {
     sysLogger.info('[App] Clean shutdown initiated...')
     try { votingManager.stop() } catch { /* ignore */ }
@@ -260,6 +305,36 @@ function createWindow(): void {
   })
 
   let activeTwitchChannel: string = '';
+
+  // Bot chat commands: !karma / !top / !effects / !me / !help
+  votingManager.setChatCommandHandler((command, username) => {
+    if (!activeTwitchChannel) return;
+    const reply = buildBotReply(command, username);
+    if (reply) twitchBridge.sendMessage(activeTwitchChannel, reply);
+  });
+
+  function buildBotReply(command: string, username: string): string | null {
+    const top = dbManager.getTopKarma(5);
+    switch (command) {
+      case '!karma':
+      case '!me': {
+        const karma = dbManager.getViewerKarma(username);
+        return `☣️ [UMBRELLA CORP] @${username}, твоя карма: ${karma > 0 ? '+' : ''}${karma}`;
+      }
+      case '!top': {
+        if (top.length === 0) return `☣️ [UMBRELLA CORP] Лидерборд пуст — проголосуй цифрой 1-3!`;
+        const lines = top.map((v, i) => `${i + 1}. ${v.username} (${v.karma > 0 ? '+' : ''}${v.karma})`).join(' | ');
+        return `☣️ [UMBRELLA CORP] Топ оперативников: ${lines}`;
+      }
+      case '!effects':
+        return `☣️ [UMBRELLA CORP] Пул эффектов: Подорожник, Адреналин, Патроны, Ветерок, Царапина, Замедление, Осечка, Подскок, Разворот 180°, FOV, Помехи, Слепота, Инверт и др. Голосуй цифрой во время раунда! 5 голосов подряд = MEGA-версия.`;
+      case '!help':
+        return `☣️ [UMBRELLA CORP] Команды: !karma — твоя карма | !top — лидерборд | !effects — список эффектов. Во время раунда пиши 1, 2 или 3.`;
+      default:
+        return null;
+    }
+  }
+
 
   twitchBridge.onStatusChange((status) => {
     mainWindow.webContents.send('twitch:status', {
