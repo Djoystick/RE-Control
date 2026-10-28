@@ -30,6 +30,16 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { TiersConfigurator } from './TiersConfigurator'
 import { VoiceTester } from './VoiceTester'
+import { getEffectById } from '../../../shared/effects-registry'
+
+// Quick-trigger tiles on the TESTS tab: high-value effects a streamer pokes most
+const QUICK_TEST_EFFECT_IDS = [
+    'empty_mag', 'hop', 'push_back', 'light_heal', 'speed_up', 'papercut'
+]
+const QUICK_TEST_EFFECTS = QUICK_TEST_EFFECT_IDS
+    .map(id => getEffectById(id))
+    .filter((e): e is NonNullable<ReturnType<typeof getEffectById>> => Boolean(e))
+    .map(e => ({ id: e.id, name: e.name, description: e.description, icon: e.icon ?? '▸' }))
 
 export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReinstall }) => {
   const [logs, setLogs] = useState<any[]>([ 
@@ -880,7 +890,7 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
                         )}
                         {tokenStatus === 'invalid' && (
                           <span className="text-[9px] text-red-400 font-bold flex items-center gap-0.5">
-                            <XCircle size={10} /> ТРЕБУЕТСЯ oauth:...
+                            <XCircle size={10} /> НУЖЕН OAuth-ТОКЕН
                           </span>
                         )}
                         {tokenStatus === 'validating' && (
@@ -1067,78 +1077,24 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
                 <span className="text-[10px] text-zinc-500 uppercase">Мгновенное исполнение в RE2</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 flex-1">
-                <button
-                  className="bg-[#12141c] hover:bg-[#181a24] border border-[#242838] hover:border-red-900/60 text-zinc-200 text-xs font-mono font-bold py-2.5 px-3 rounded flex items-center justify-between transition-all"
-                  onClick={async () => {
-                    await window.api?.triggerEffect?.('empty_mag')
-                    setTestSuccessEffect('empty_mag')
-                    setTimeout(() => setTestSuccessEffect(null), 1500)
-                  }}
-                >
-                  <span className="truncate">ОСЕЧКА [EMPTY_MAG]</span>
-                  {testSuccessEffect === 'empty_mag' ? <Check size={14} className="text-emerald-400 flex-shrink-0" /> : <Zap size={13} className="text-zinc-500 flex-shrink-0" />}
-                </button>
-
-                <button
-                  className="bg-[#12141c] hover:bg-[#181a24] border border-[#242838] hover:border-red-900/60 text-zinc-200 text-xs font-mono font-bold py-2.5 px-3 rounded flex items-center justify-between transition-all"
-                  onClick={async () => {
-                    await window.api?.triggerEffect?.('hop')
-                    setTestSuccessEffect('hop')
-                    setTimeout(() => setTestSuccessEffect(null), 1500)
-                  }}
-                >
-                  <span className="truncate">ПОДСКОК [HOP]</span>
-                  {testSuccessEffect === 'hop' ? <Check size={14} className="text-emerald-400 flex-shrink-0" /> : <Zap size={13} className="text-zinc-500 flex-shrink-0" />}
-                </button>
-
-                <button
-                  className="bg-[#12141c] hover:bg-[#181a24] border border-[#242838] hover:border-red-900/60 text-zinc-200 text-xs font-mono font-bold py-2.5 px-3 rounded flex items-center justify-between transition-all"
-                  onClick={async () => {
-                    await window.api?.triggerEffect?.('push_back')
-                    setTestSuccessEffect('push_back')
-                    setTimeout(() => setTestSuccessEffect(null), 1500)
-                  }}
-                >
-                  <span className="truncate">ВЕТЕРОК [PUSH_BACK]</span>
-                  {testSuccessEffect === 'push_back' ? <Check size={14} className="text-emerald-400 flex-shrink-0" /> : <Zap size={13} className="text-zinc-500 flex-shrink-0" />}
-                </button>
-
-                <button
-                  className="bg-[#12141c] hover:bg-[#181a24] border border-[#242838] hover:border-red-900/60 text-zinc-200 text-xs font-mono font-bold py-2.5 px-3 rounded flex items-center justify-between transition-all"
-                  onClick={async () => {
-                    await window.api?.triggerEffect?.('heal_small')
-                    setTestSuccessEffect('heal_small')
-                    setTimeout(() => setTestSuccessEffect(null), 1500)
-                  }}
-                >
-                  <span className="truncate">ХИЛ (+25% HP)</span>
-                  {testSuccessEffect === 'heal_small' ? <Check size={14} className="text-emerald-400 flex-shrink-0" /> : <Zap size={13} className="text-zinc-500 flex-shrink-0" />}
-                </button>
-
-                <button
-                  className="bg-[#12141c] hover:bg-[#181a24] border border-[#242838] hover:border-red-900/60 text-zinc-200 text-xs font-mono font-bold py-2.5 px-3 rounded flex items-center justify-between transition-all"
-                  onClick={async () => {
-                    await window.api?.triggerEffect?.('speed_up')
-                    setTestSuccessEffect('speed_up')
-                    setTimeout(() => setTestSuccessEffect(null), 1500)
-                  }}
-                >
-                  <span className="truncate">АДРЕНАЛИН [SPEED_UP]</span>
-                  {testSuccessEffect === 'speed_up' ? <Check size={14} className="text-emerald-400 flex-shrink-0" /> : <Zap size={13} className="text-zinc-500 flex-shrink-0" />}
-                </button>
-
-                <button
-                  className="bg-[#12141c] hover:bg-[#181a24] border border-[#242838] hover:border-red-900/60 text-zinc-200 text-xs font-mono font-bold py-2.5 px-3 rounded flex items-center justify-between transition-all"
-                  onClick={async () => {
-                    await window.api?.triggerEffect?.('papercut')
-                    setTestSuccessEffect('papercut')
-                    setTimeout(() => setTestSuccessEffect(null), 1500)
-                  }}
-                >
-                  <span className="truncate">ЦАРАПИНА (-10% HP)</span>
-                  {testSuccessEffect === 'papercut' ? <Check size={14} className="text-emerald-400 flex-shrink-0" /> : <Zap size={13} className="text-zinc-500 flex-shrink-0" />}
-                </button>
+              <div className="grid grid-cols-2 gap-2 flex-1 auto-rows-min">
+                {QUICK_TEST_EFFECTS.map((eff) => (
+                  <button
+                    key={eff.id}
+                    className="bg-[#12141c] hover:bg-[#181a24] border border-[#242838] hover:border-red-900/60 text-zinc-200 text-xs font-mono font-bold py-2.5 px-3 rounded flex items-center justify-between transition-all"
+                    title={`${eff.name} — ${eff.description}`}
+                    onClick={async () => {
+                      await window.api?.triggerEffect?.(eff.id)
+                      setTestSuccessEffect(eff.id)
+                      setTimeout(() => setTestSuccessEffect(null), 1500)
+                    }}
+                  >
+                    <span className="truncate">
+                      {eff.icon} {eff.name.split(' (')[0].toUpperCase()}
+                    </span>
+                    {testSuccessEffect === eff.id ? <Check size={14} className="text-emerald-400 flex-shrink-0" /> : <Zap size={13} className="text-zinc-500 flex-shrink-0" />}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -1148,7 +1104,7 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
         {activeTab === 'settings' && (
           <div className="w-full h-full grid grid-cols-2 gap-3 overflow-hidden">
             {/* Left Card: Hotkeys + Director */}
-            <div className="bg-[#0e1017] border border-[#1e2332] p-3 rounded flex flex-col justify-between overflow-hidden">
+            <div className="bg-[#0e1017] border border-[#1e2332] p-3 rounded flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar">
               <div className="flex flex-col gap-2.5">
                 <h3 className="text-xs font-bold text-zinc-100 uppercase font-mono border-b border-[#1e2332] pb-2 flex items-center gap-2">
                   <span>ГЛОБАЛЬНЫЕ ГОРЯЧИЕ КЛАВИШИ</span>
@@ -1345,7 +1301,7 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
             </div>
 
             {/* Right Card: Dangerous Zone & Maintenance */}
-            <div className="bg-[#0e1017] border border-[#1e2332] p-3 rounded flex flex-col justify-between overflow-hidden">
+            <div className="bg-[#0e1017] border border-[#1e2332] p-3 rounded flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar">
               <div className="flex flex-col gap-2.5">
                 <h3 className="text-xs font-bold text-red-400 uppercase font-mono border-b border-[#1e2332] pb-2">
                   СЛУЖЕБНЫЕ ОПЦИИ И ОПАСНАЯ ЗОНА
@@ -1411,7 +1367,7 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
               </div>
 
               <button
-                className="w-full bg-red-950/20 hover:bg-red-900/40 border border-red-900/50 hover:border-red-700/80 text-red-400 hover:text-red-300 text-xs uppercase font-mono font-bold py-2 rounded transition-colors whitespace-nowrap"
+                className="w-full mt-3 bg-red-950/20 hover:bg-red-900/40 border border-red-900/50 hover:border-red-700/80 text-red-400 hover:text-red-300 text-xs uppercase font-mono font-bold py-2 rounded transition-colors whitespace-nowrap"
                 onClick={() => onReinstall && onReinstall()}
               >
                 ПЕРЕУСТАНОВИТЬ МОСТ REFRAMEWORK

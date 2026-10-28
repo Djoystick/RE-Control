@@ -9,7 +9,7 @@
   </p>
 
   <p align="center">
-    <a href="https://github.com/Djoystick/RE-Control/releases"><img src="https://img.shields.io/badge/Release-v1.6.0-red?style=for-the-badge&logo=github" alt="Release v1.6.0" /></a>
+    <a href="https://github.com/Djoystick/RE-Control/releases"><img src="https://img.shields.io/badge/Release-v1.6.1-red?style=for-the-badge&logo=github" alt="Release v1.6.1" /></a>
     <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-39-47848F?style=for-the-badge&logo=electron&logoColor=white" alt="Electron 39" /></a>
     <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React 19" /></a>
     <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5" /></a>

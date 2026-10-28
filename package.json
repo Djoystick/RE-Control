@@ -1,6 +1,6 @@
 {
   "name": "re-control",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "RE:CONTROL — интерактивная Twitch-интеграция для Resident Evil: зрители голосуют, донатят и применяют эффекты в игре в реальном времени",
   "main": "./out/main/index.js",
   "author": "Djoystick",

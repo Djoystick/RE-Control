@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { Check, X, GripVertical, CheckCircle2 } from 'lucide-react'
+import { VOTABLE_EFFECTS } from '../../../shared/effects-registry'
 
 const Tooltip = ({ children, content }: { children: React.ReactElement<any>, content: string }) => {
   const [isVisible, setIsVisible] = useState(false);
@@ -87,28 +88,11 @@ interface Tier {
   effects: Effect[];
 }
 
-const INITIAL_POOL: Effect[] = [
-  { id: 'hop', name: 'Ик!', description: 'Итан внезапно подпрыгивает, сбивая прицел.' },
-  { id: 'push_back', name: 'Ветерок', description: 'Неведомая сила толкает героя назад.' },
-  { id: 'spin_180', name: 'Головокружение', description: 'Камера резко разворачивается на 180 градусов.' },
-  { id: 'auto_run', name: 'Леон — спринтер', description: 'Скорость передвижения увеличена на 60 секунд.' },
-  { id: 'fov_narrow', name: 'Клаустрофобия', description: 'Поле зрения сужается, создавая давящее чувство.' },
-  { id: 'fov_wide', name: 'Рыбий глаз', description: 'Поле зрения расширяется, искажая перспективу.' },
-  { id: 'camera_shake', name: 'Паническая атака', description: 'Камера начинает сильно трястись.' },
-  { id: 'ui_wipe', name: 'Где мои очки?', description: 'Интерфейс игры временно скрывается.' },
-  { id: 'static_burst', name: 'Помехи экрана', description: 'На экране появляются сильные радиопомехи на пару секунд.' },
-  { id: 'light_heal', name: 'Подорожник', description: 'Восстанавливает 15% от максимального здоровья.' },
-  { id: 'papercut', name: 'Царапина', description: 'Отнимает 5% здоровья. Осторожно, щиплет!' },
-  { id: 'speed_up', name: 'Адреналин', description: 'Игрок начинает двигаться заметно быстрее.' },
-  { id: 'slow_down', name: 'Тяжелые ботинки', description: 'Движения становятся медленными и тяжелыми.' },
-  { id: 'empty_mag', name: 'Осечка', description: 'Текущий магазин мгновенно пустеет.' },
-  { id: 'care_package', name: 'С небес', description: 'Сбрасывает немного припасов прямо в инвентарь.' },
-  { id: 'green_herb', name: 'Зеленушка', description: 'Добавляет зеленую траву в инвентарь.' },
-  { id: 'invert_controls', name: 'Пьяный геймпад', description: 'Инвертирует управление на 10 секунд.' },
-  { id: 'disarm', name: 'Пацифист', description: 'Временно запрещает использовать оружие.' },
-  { id: 'blackout', name: 'Вырубили свет', description: 'Экран полностью гаснет на 3 секунды.' },
-  { id: 'fake_mrx', name: 'Свой среди чужих', description: 'Проигрывает тяжелые шаги Мистера Х где-то рядом.' }
-];
+const INITIAL_POOL: Effect[] = VOTABLE_EFFECTS.map((e) => ({
+  id: e.id,
+  name: e.name.split(' (')[0],
+  description: e.description
+}));
 
 export const TiersConfigurator: React.FC<TiersConfiguratorProps> = ({ onClose, embedded = false }) => {
   const [pool, setPool] = useState<Effect[]>(INITIAL_POOL);
@@ -291,7 +275,7 @@ export const TiersConfigurator: React.FC<TiersConfiguratorProps> = ({ onClose, e
       {/* FOOTER BAR */}
       <div className="flex justify-between items-center border-t border-[#222634] pt-1.5 flex-shrink-0">
         <span className="text-[10px] text-zinc-500 font-mono">
-          {tiers.reduce((acc, t) => acc + t.effects.length, 0)} эффектов активно в {tiers.length} тирах
+          {tiers.reduce((acc, t) => acc + t.effects.length, 0)} из {pool.length} эффектов распределено по {tiers.length} тирам
         </span>
         <div className="flex items-center gap-2">
           {!embedded && onClose && (
