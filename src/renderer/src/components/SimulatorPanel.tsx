@@ -827,7 +827,7 @@ export const SimulatorPanel: React.FC<{ onReinstall?: () => void }> = ({ onReins
                       <div className="flex-1 relative">
                         <input 
                           type="text" 
-                          placeholder="например: bratishkinoff, shroud, lirik" 
+                          placeholder="например: hyver, dmitry_bale, nuke73" 
                           className="w-full bg-[#08090d] border border-[#222634] focus:border-red-600/70 text-zinc-100 px-3 py-1.5 font-mono text-xs rounded outline-none transition-colors"
                           value={twitchChannel}
                           onChange={(e) => setTwitchChannel(e.target.value)}
