@@ -9,7 +9,7 @@
   </p>
 
   <p align="center">
-    <a href="https://github.com/Djoystick/RE-Control/releases"><img src="https://img.shields.io/badge/Release-v1.6.1-red?style=for-the-badge&logo=github" alt="Release v1.6.1" /></a>
+    <a href="https://github.com/Djoystick/RE-Control/releases"><img src="https://img.shields.io/badge/Release-v1.7.0-red?style=for-the-badge&logo=github" alt="Release v1.7.0" /></a>
     <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-39-47848F?style=for-the-badge&logo=electron&logoColor=white" alt="Electron 39" /></a>
     <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React 19" /></a>
     <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5" /></a>
@@ -66,7 +66,8 @@
 - 🆘 **Аварийная остановка (Panic Hotkey):** Горячая клавиша `Ctrl+Shift+P` (настраивается) мгновенно сбрасывает все активные эффекты в игре (TimeScale, FOV, слепота, помехи), останавливает голосование и замораживает автопилот — с уведомлением в чат. Стример всегда держит ситуацию под контролем.
 - 🎙️ **Студийная озвучка + TTS-фолбэк:** актёрские записи остаются основным голосом проекта (синхронизированные аркадные субтитры, воспроизведение без сторонних микшеров). Если файлов нет — реплики синтезируются Edge TTS (`ru-RU-DmitryNeural` / `ru-RU-SvetlanaNeural`), кэшируются на диск и дальше играют офлайн. Актёрские записи всегда в приоритете.
 - ⚡ **Event Loop Protection & SQLite WAL:** Батчинг записи кармы зрителей раз в 300 мс в единой транзакции исключает лаги и подвисания интерфейса при спаме в чате.
-- 🛡️ **Комплексная безопасность (Zero-Trust):** Аппаратное шифрование OAuth токенов через Windows DPAPI (`safeStorage`), Bearer-токенизация веб-контура, Rate Limiting, защита от DoS (64KB payload cap, WS backpressure) и Path Traversal.
+- 🔓 **Twitch без токена (read-only по умолчанию):** для работы нужен только ник канала — приложение читает чат анонимно, без OAuth и прав модератора. Объявления в этот режиме показывает OBS-оверлей. Опциональный бот авторизуется Device Code Flow (код на twitch.tv/activate) — вставка `oauth:`-токена не нужна, токен шифруется через Windows DPAPI и не отображается.
+- 🛡️ **Комплексная безопасность (Zero-Trust):** Bearer-токенизация веб-контура, Rate Limiting, защита от DoS (64KB payload cap, WS backpressure) и Path Traversal.
 
 ---
 
@@ -388,6 +389,7 @@ RE:Control содержит встроенный сервер оверлея, к
 - [x] **Этап 4.8 (v1.4.1):** TTS-фолбэк озвучки (Edge TTS + дисковый кэш + прогрев), реестр реплик с 14 событиями, mime-тип аудио в оверлее, UI-блок «СИНТЕЗ РЕЧИ».
 - [x] **Этап 4.9 (v1.5.0):** Босс-раунды с порогом явки и визуалом в оверлее, персистентность сессии Директора, OBS-маркеры записи (obs-websocket).
 - [x] **Этап 6 (v1.6.0):** Игровые профили (RE2 — полный, RE3 — базовый, остальные — без эффектов), честный визард с предупреждениями, демо-режим без игры.
+- [x] **Этап 4.10 (v1.7.0):** Twitch без токена — read-only подключение по нику канала (анонимное чтение чата) + Device Code Flow для опциональных бот-объявлений; виджет объявлений в оверлее.
 - [ ] **Этап 5:** Реальное подключение Twitch EventSub & DonationAlerts WebSockets по OAuth токену + проброс конфигурации тиров (вкладка TIERS) в логику донатов бэкенда.
 - [ ] **Этап 6:** Мульти-игровые профили движка (RE3 Remake, RE4 Remake, Monster Hunter).
 - [ ] **Этап 7:** Публичный инсталлятор (.exe) с автоматическим обновлением (Auto-Updater).

@@ -6,6 +6,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { ChatSimulator } from './simulator/ChatSimulator'
 import { TwitchBridge } from './chat-bridge/TwitchBridge'
+import { deviceCodeAuth } from './chat-bridge/DeviceCodeAuth'
 import { DonationBridge } from './chat-bridge/DonationBridge'
 import { REBridge } from './game-bridge/REBridge'
 import { VotingManager } from './game-bridge/VotingManager'
@@ -96,9 +97,7 @@ function createWindow(): void {
     mainWindow.webContents.send('simulator:syslog', { message: 'PANIC STOP: все эффекты сброшены, автопилот остановлен.' });
     narrator.say('panic');
     obsMarkerService.mark('PANIC STOP').catch(() => {});
-    if (activeTwitchChannel) {
-      twitchBridge.sendMessage(activeTwitchChannel, '☣️ [UMBRELLA CORP] ⏸ АВАРИЙНАЯ ОСТАНОВКА. Все активные протоколы деактивированы.');
-    }
+    announce('☣️ [UMBRELLA CORP] ⏸ АВАРИЙНАЯ ОСТАНОВКА. Все активные протоколы деактивированы.');
   }
 
   ipcMain.handle('settings:getHotkeys', () => getHotkeys());
@@ -164,7 +163,7 @@ function createWindow(): void {
     const text = report.text;
     mainWindow.webContents.send('simulator:syslog', { message: text });
     overlayServer.broadcast('report:session', report);
-    if (activeTwitchChannel) twitchBridge.sendMessage(activeTwitchChannel, text);
+    announce(text);
     return report;
   });
 
@@ -374,17 +373,27 @@ function createWindow(): void {
 
   let activeTwitchChannel: string = '';
 
+  /**
+   * Единая точка исходящих объявлений. Если бот авторизован (device flow) —
+   * сообщение уходит в чат. Если нет (read-only) — попадает в оверлей,
+   * чтобы зритель всё равно увидел событие.
+   */
+  function announce(message: string) {
+    if (activeTwitchChannel && twitchBridge.sendMessage(activeTwitchChannel, message)) return;
+    overlayServer.broadcast('announce', { text: message, readOnly: true });
+  }
+
   // Bot chat commands: !karma / !top / !effects / !me / !help
   votingManager.setChatCommandHandler((command, username) => {
     if (!activeTwitchChannel) return;
     const reply = buildBotReply(command, username);
-    if (reply) twitchBridge.sendMessage(activeTwitchChannel, reply);
+    if (reply) announce(reply);
   });
 
   // Stateful karma abilities and the session report answer directly
   votingManager.on('bot:reply', (message: string) => {
     mainWindow.webContents.send('simulator:syslog', { message });
-    if (activeTwitchChannel) twitchBridge.sendMessage(activeTwitchChannel, message);
+    if (activeTwitchChannel) announce(message);
   });
 
   function buildBotReply(command: string, username: string): string | null {
@@ -436,16 +445,14 @@ function createWindow(): void {
 
     if (activeTwitchChannel) {
       const optionsText = state.options.map((opt: any) => `[${opt.id}] ${opt.displayName}`).join('  |  ');
-      twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] Инициализирован био-протокол голосования! Модификаторы Леона (1-3): ${optionsText} (30 сек)`);
+      announce(`☣️ [UMBRELLA CORP] Инициализирован био-протокол голосования! Модификаторы Леона (1-3): ${optionsText} (60 сек)`);
     }
   })
 
   votingManager.on('vote:intervention', (state) => {
     mainWindow.webContents.send('simulator:syslog', { message: state.message })
     overlayServer.broadcast('vote:intervention', state)
-    if (activeTwitchChannel) {
-      twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 🚨 ДИРЕКТИВА АМБРЕЛЛЫ: ${state.message}`);
-    }
+    announce(`☣️ [UMBRELLA CORP] 🚨 ДИРЕКТИВА АМБРЕЛЛЫ: ${state.message}`);
   })
 
   // Narrator: intervention events
@@ -616,17 +623,13 @@ function createWindow(): void {
         mainWindow.webContents.send('simulator:syslog', { message: `SHIELD: ${shieldedBy} cancelled ${cancelled}` })
         overlayServer.broadcast('vote:shielded', { by: shieldedBy, cancelled })
         mainWindow.webContents.send('vote:shielded', { by: shieldedBy, cancelled })
-        if (activeTwitchChannel) {
-          twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 🛡 ЗАЩИТНЫЙ ПРОТОКОЛ @${shieldedBy}: враждебный модификатор [ ${cancelled} ] нейтрализован.`);
-        }
+        announce(`☣️ [UMBRELLA CORP] 🛡 ЗАЩИТНЫЙ ПРОТОКОЛ @${shieldedBy}: враждебный модификатор [ ${cancelled} ] нейтрализован.`);
       } else {
         // Boss round lacked the required turnout — the effect never lands
         const boss = state.boss
         mainWindow.webContents.send('simulator:syslog', { message: `BOSS FAILED: ${cancelled} (${boss?.votes ?? 0}/${boss?.threshold ?? 0})` })
         overlayServer.broadcast('boss:failed', { cancelled, votes: boss?.votes ?? 0, threshold: boss?.threshold ?? 0 })
-        if (activeTwitchChannel) {
-          twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 💀 БОСС-РАУНД ПРОВАЛЕН: явка ${boss?.votes ?? 0}/${boss?.threshold ?? 0}. Модификатор [ ${cancelled} ] не активирован.`);
-        }
+        announce(`☣️ [UMBRELLA CORP] 💀 БОСС-РАУНД ПРОВАЛЕН: явка ${boss?.votes ?? 0}/${boss?.threshold ?? 0}. Модификатор [ ${cancelled} ] не активирован.`);
       }
       return
     }
@@ -634,9 +637,7 @@ function createWindow(): void {
     mainWindow.webContents.send('simulator:syslog', { message: 'WINNER: ' + winner.displayName })
     overlayServer.broadcast('vote:end', { winner, state })
 
-    if (activeTwitchChannel) {
-      twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 🏆 Протокол завершен: [ ${winner.displayName} ] активирован (${winner.votes} голосов)!`);
-    }
+    announce(`☣️ [UMBRELLA CORP] 🏆 Протокол завершен: [ ${winner.displayName} ] активирован (${winner.votes} голосов)!`);
 
     // Send effect to the game, then announce on the overlay for as long as the game reports it active
     gameBridge.sendCommand(winner.effectId).then((result) => {
@@ -667,9 +668,7 @@ function createWindow(): void {
     overlayServer.broadcast('traitor:start', state)
     obsMarkerService.mark(`TRAITOR: @${state.username}`).catch(() => {})
     
-    if (activeTwitchChannel) {
-      twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] 💀 КРИТИЧЕСКАЯ УГРОЗА! Предатель @${state.username} перехватил терминал био-контроля!`);
-    }
+    announce(`☣️ [UMBRELLA CORP] 💀 КРИТИЧЕСКАЯ УГРОЗА! Предатель @${state.username} перехватил терминал био-контроля!`);
   })
 
   votingManager.on('traitor:end', (state) => {
@@ -679,9 +678,7 @@ function createWindow(): void {
     }
     mainWindow.webContents.send('traitor:end', state)
     mainWindow.webContents.send('simulator:syslog', { message: `TRAITOR MODE ENDED!` })
-    if (activeTwitchChannel) {
-      twitchBridge.sendMessage(activeTwitchChannel, `☣️ [UMBRELLA CORP] Контроль над объектом восстановлен. Возврат в стандартный протокол.`);
-    }
+    announce(`☣️ [UMBRELLA CORP] Контроль над объектом восстановлен. Возврат в стандартный протокол.`);
   })
 
   votingManager.on('traitor:effect', (effectId) => {
@@ -827,22 +824,24 @@ function createWindow(): void {
         activeTwitchChannel = channel;
         sysLogger.info('Twitch connection successful.');
         mainWindow.webContents.send('simulator:syslog', { message: 'TWITCH CONNECTED: #' + channel })
-        mainWindow.webContents.send('twitch:status', { 
-            connected: true, 
-            channel, 
-            botUsername: twitchBridge.botUsername, 
+        mainWindow.webContents.send('twitch:status', {
+            connected: true,
+            channel,
+            botUsername: twitchBridge.botUsername,
             botAuthenticated: twitchBridge.isBotAuthenticated,
-            isMod: twitchBridge.isMod 
+            isMod: twitchBridge.isMod,
+            readOnly: twitchBridge.isReadOnly
         })
         overlayServer.broadcast('twitch:connected', { channel })
     }).catch(err => {
         sysLogger.error('Twitch connection failed', err);
         mainWindow.webContents.send('simulator:syslog', { message: 'TWITCH CONNECTION FAILED!' })
-        mainWindow.webContents.send('twitch:status', { 
-            connected: false, 
-            channel: '', 
-            botUsername: '', 
+        mainWindow.webContents.send('twitch:status', {
+            connected: false,
+            channel: '',
+            botUsername: '',
             botAuthenticated: false,
+            readOnly: true,
             isMod: false 
         })
     });
@@ -870,6 +869,35 @@ function createWindow(): void {
     }
     return await twitchBridge.sendTestPing(target);
   })
+
+  // ─── DEVICE CODE FLOW (v1.7.0) ───
+  deviceCodeAuth.setClientId(process.env.TWITCH_CLIENT_ID || '');
+
+  ipcMain.handle('twitch:deviceStart', async () => {
+    const result = await deviceCodeAuth.start();
+    if ('error' in result) return result;
+    deviceCodeAuth.openVerificationPage(result.verificationUri);
+    return result;
+  });
+
+  ipcMain.handle('twitch:devicePoll', async (_, deviceCode: string) => {
+    return deviceCodeAuth.poll(deviceCode);
+  });
+
+  ipcMain.handle('twitch:deviceClear', () => {
+    deviceCodeAuth.clearToken();
+    twitchBridge.disconnect();
+    activeTwitchChannel = '';
+    mainWindow.webContents.send('twitch:status', { connected: false, channel: '', botUsername: '', botAuthenticated: false, isMod: false, readOnly: true });
+    return { success: true };
+  });
+
+  ipcMain.handle('twitch:getMode', () => ({
+    readOnly: !twitchBridge.canWrite(),
+    botAuthenticated: twitchBridge.isBotAuthenticated,
+    botUsername: twitchBridge.botUsername,
+    deviceFlowAvailable: deviceCodeAuth.isConfigured()
+  }));
 
   ipcMain.handle('twitch:validateToken', async (_, token: string) => {
     try {

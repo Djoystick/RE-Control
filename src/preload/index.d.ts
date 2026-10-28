@@ -49,6 +49,10 @@ declare global {
       getDirectorConfig: () => Promise<any>
       saveDirectorConfig: (config: any) => Promise<any>
       getTtsConfig: () => Promise<{ enabled: boolean; pythonCommand?: string }>
+      deviceStart: () => Promise<{ deviceCode?: string; userCode?: string; verificationUri?: string; expiresIn?: number; interval?: number; error?: string }>
+      devicePoll: (deviceCode: string) => Promise<{ success: boolean; username?: string; error?: string; pending?: boolean }>
+      deviceClear: () => Promise<{ success: boolean }>
+      getTwitchMode: () => Promise<{ readOnly: boolean; botAuthenticated: boolean; botUsername: string; deviceFlowAvailable: boolean }>
       setTtsConfig: (patch: any) => Promise<any>
       getTtsStatus: () => Promise<{ enabled: boolean; available: boolean }>
       warmTtsCache: () => Promise<{ generated: number; total: number }>

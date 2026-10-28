@@ -10,6 +10,8 @@ export class TwitchBridge implements IChatBridge {
     private statusCallback: ((status: any) => void) | null = null;
     private client: tmi.Client | null = null;
     public isBotAuthenticated: boolean = false;
+    /** true = подключение без токена (justinfan): читаем чат, но не пишем */
+    public isReadOnly: boolean = true;
     private commandCallback: ((cmd: ChatCommand) => void) | null = null;
 
     async connect(channel: string): Promise<void> {
@@ -39,6 +41,7 @@ export class TwitchBridge implements IChatBridge {
         }
 
         this.isBotAuthenticated = !!identity;
+        this.isReadOnly = !identity;
         this.client = new tmi.Client({
             identity,
             channels: [channel]
@@ -111,6 +114,8 @@ export class TwitchBridge implements IChatBridge {
         // Reset state
         this.isMod = false;
         this.botUsername = '';
+        this.isBotAuthenticated = false;
+        this.isReadOnly = true;
         if (this.statusCallback) this.statusCallback(this.getStatus());
     }
 
@@ -118,10 +123,21 @@ export class TwitchBridge implements IChatBridge {
         this.commandCallback = callback;
     }
 
-    sendMessage(channel: string, message: string): void {
-        if (this.client) {
-            this.client.say(channel, message).catch(console.error);
-        }
+    /**
+     * Отправка сообщения в чат. В read-only режиме (без токена) сообщение
+     * не отправляется — вызывающая сторона должна продублировать его
+     * в оверлей через announce().
+     */
+    sendMessage(channel: string, message: string): boolean {
+        if (!this.client || this.isReadOnly) return false;
+        this.client.say(channel, message).catch((err) => {
+            console.error('[TwitchBridge] say failed:', err);
+        });
+        return true;
+    }
+
+    canWrite(): boolean {
+        return !!this.client && !this.isReadOnly && this.isBotAuthenticated;
     }
 
     onStatusChange(callback: (status: any) => void): void {
@@ -133,7 +149,8 @@ export class TwitchBridge implements IChatBridge {
             connected: !!this.client,
             botAuthenticated: this.isBotAuthenticated,
             botUsername: this.botUsername,
-            isMod: this.isMod
+            isMod: this.isMod,
+            readOnly: this.isReadOnly
         };
     }
 

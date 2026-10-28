@@ -64,6 +64,7 @@ export default function OverlayApp() {
   const [interventionBanner, setInterventionBanner] = useState<{ type: string; message: string } | null>(null)
   const [narratorData, setNarratorData] = useState<{ text: string, type: string } | null>(null)
   const [reportData, setReportData] = useState<any | null>(null)
+  const [announcements, setAnnouncements] = useState<{ text: string; at: number }[]>([])
   
   // Local timer for smooth countdown
   const [localTimeRemaining, setLocalTimeRemaining] = useState(0)
@@ -95,6 +96,8 @@ export default function OverlayApp() {
           } else if (msg.type === 'vote:end') {
             setVoteState(null)
             setInterventionBanner(null)
+          } else if (msg.type === 'announce') {
+            setAnnouncements((prev) => [...prev.slice(-2), { text: msg.data.text, at: Date.now() }])
           } else if (msg.type === 'vote:shielded') {
             setVoteState(null)
             setInterventionBanner({ type: 'shield', message: `🛡 ЗАЩИТА @${msg.data.by}: [${msg.data.cancelled}] нейтрализован` })
@@ -174,6 +177,14 @@ export default function OverlayApp() {
     
     return () => clearInterval(interval);
   }, [voteState?.isActive, localTimeRemaining]);
+
+  // Prune announcement stack: each item lives 12 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setAnnouncements((prev) => prev.filter(a => Date.now() - a.at < 12000))
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <div className="w-screen h-screen overflow-hidden p-8 relative font-pixel">
@@ -319,6 +330,18 @@ export default function OverlayApp() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Announcements — bot messages when running in read-only Twitch mode */}
+        <div className="absolute top-12 left-12 flex flex-col gap-2 items-start">
+          {announcements.map((a) => (
+            <div
+              key={a.at}
+              className="bg-[#0d1117ee] border-l-4 border-[#e01c3f] text-white px-4 py-2 rounded shadow-[0_4px_16px_rgba(0,0,0,0.6)] max-w-[560px] text-sm"
+            >
+              {a.text}
+            </div>
+          ))}
+        </div>
 
         {/* Session report — shareable post-stream summary */}
         <AnimatePresence>
